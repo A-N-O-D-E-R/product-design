@@ -131,6 +131,35 @@ class JiraClient {
         return new Bulk(cles, erreurs);
     }
 
+    /**
+     * Issue déjà créée par une tentative à l'issue inconnue : même projet, type, titre exact et, pour une Story,
+     * même Epic parent. JQL `summary ~` est une recherche plein texte : le filtre exact se fait ici.
+     */
+    @SuppressWarnings("unchecked")
+    java.util.Optional<String> chercher(String projet, String type, String titre, String parent) {
+        // Guillemets et antislashs retirés de la phrase recherchée ; l'égalité exacte est vérifiée ci-dessous.
+        String phrase = titre.replaceAll("[\"\\\\]", " ");
+        String jql = "project = \"" + projet + "\" AND issuetype = " + type + " AND summary ~ \"\\\"" + phrase + "\\\"\" ORDER BY created DESC";
+        Map<String, Object> r = appel(() -> client().get()
+                .uri(u -> u.path("/rest/api/3/search/jql").queryParam("jql", "{jql}").queryParam("fields", "summary,parent")
+                        .queryParam("maxResults", 50).build(jql))
+                .retrieve().body(Map.class));
+        for (Map<String, Object> issue : (List<Map<String, Object>>) r.getOrDefault("issues", List.of())) {
+            Map<String, Object> champs = (Map<String, Object>) issue.getOrDefault("fields", Map.of());
+            Map<String, Object> parentTrouve = (Map<String, Object>) champs.get("parent");
+            if (titre.equals(champs.get("summary"))
+                    && (parent == null || parentTrouve != null && parent.equals(parentTrouve.get("key")))) {
+                return java.util.Optional.of(String.valueOf(issue.get("key")));
+            }
+        }
+        return java.util.Optional.empty();
+    }
+
+    /** Un 4xx dit clairement que rien n'a été créé ; un 5xx, un timeout ou une erreur réseau laissent le doute. */
+    static boolean incertain(RuntimeException e) {
+        return !(e instanceof HttpClientErrorException) && !(e instanceof ResponseStatusException);
+    }
+
     void modifier(String cle, Map<String, Object> champs) {
         appel(() -> client().put().uri("/rest/api/3/issue/{cle}", cle).contentType(MediaType.APPLICATION_JSON)
                 .body(Map.of("fields", champs)).retrieve().toBodilessEntity());

@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -28,7 +29,8 @@ class JiraController {
     record Echec(String titre, String erreur) {}
 
     /** orphelines : issues Jira dont l'élément local n'existe plus, laissées intactes (E-28). */
-    record Resultat(String projet, int epicsCrees, int storiesCreees, int liensCrees, int misesAJour, List<Echec> echecs,
+    /** recuperes : issues retrouvées dans Jira après une création à l'issue inconnue, au lieu d'être recréées. */
+    record Resultat(String projet, int epicsCrees, int storiesCreees, int liensCrees, int misesAJour, int recuperes, List<Echec> echecs,
                     List<String> orphelines) {}
 
     private record Lien(long ticketId, long parId, String cle, String parCle) {}
@@ -54,73 +56,111 @@ class JiraController {
         if (roadmap.jalons().isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Roadmap vide : rien à exporter.");
         }
-        String dejaExporte = jdbc.sql("SELECT jira_projet FROM spec WHERE id = ?").param(specId).query(String.class).optional().orElse(null);
-        String projet = dejaExporte != null ? dejaExporte : demande.projet() == null ? "" : demande.projet().strip().toUpperCase();
+        String projet = roadmap.jiraProjet() != null ? roadmap.jiraProjet()
+                : demande.projet() == null ? "" : demande.projet().strip().toUpperCase();
         if (projet.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Clé du projet Jira obligatoire.");
         }
         JiraClient.Types types = jira.types(projet);
-        jdbc.sql("UPDATE spec SET jira_projet = ? WHERE id = ?").params(projet, specId).update();
+        Set<Long> jalonsIncertains = Set.copyOf(jdbc.sql("SELECT id FROM jalon WHERE spec_id = ? AND jira_incertain = 1")
+                .param(specId).query(Long.class).list());
+        Set<Long> ticketsIncertains = Set.copyOf(jdbc.sql(
+                        "SELECT t.id FROM ticket t JOIN jalon j ON j.id = t.jalon_id WHERE j.spec_id = ? AND t.jira_incertain = 1")
+                .param(specId).query(Long.class).list());
 
         List<Echec> echecs = new ArrayList<>();
-        int epics = 0;
+        int epics = 0, misesAJour = 0, recuperes = 0;
         Map<Long, String> epicDuJalon = new HashMap<>();
-        int misesAJour = 0;
         for (RoadmapController.Jalon j : roadmap.jalons()) {
             String cle = j.jiraKey();
+            if (cle == null && jalonsIncertains.contains(j.id())) {
+                cle = jira.chercher(projet, types.epic(), j.titre(), null).orElse(null);
+                if (cle != null) {
+                    jdbc.sql("UPDATE jalon SET jira_key = ?, jira_incertain = 0 WHERE id = ?").params(cle, j.id()).update();
+                    recuperes++;
+                }
+            }
             if (cle != null) {
                 misesAJour += maj(echecs, "Jalon « " + j.titre() + " »", cle, Map.of("summary", j.titre()));
             } else {
                 try {
                     cle = jira.creer(champs(projet, types.epic(), j.titre(), null, null));
-                    jdbc.sql("UPDATE jalon SET jira_key = ? WHERE id = ?").params(cle, j.id()).update();
+                    jdbc.sql("UPDATE jalon SET jira_key = ?, jira_incertain = 0 WHERE id = ?").params(cle, j.id()).update();
                     epics++;
                 } catch (ResponseStatusException e) {
                     throw e;
                 } catch (RuntimeException e) {
+                    jdbc.sql("UPDATE jalon SET jira_incertain = ? WHERE id = ?").params(JiraClient.incertain(e), j.id()).update();
                     echecs.add(new Echec("Jalon « " + j.titre() + " »", e.getMessage()));
                     continue;
                 }
             }
             epicDuJalon.put(j.id(), cle);
         }
+        // Projet mémorisé seulement une fois quelque chose créé ou retrouvé : une mauvaise clé ne fige pas la cible.
+        if (roadmap.jiraProjet() == null && !epicDuJalon.isEmpty()) {
+            jdbc.sql("UPDATE spec SET jira_projet = ? WHERE id = ?").params(projet, specId).update();
+        }
 
         List<RoadmapController.Ticket> aCreer = new ArrayList<>();
         List<Map<String, Object>> champs = new ArrayList<>();
         for (RoadmapController.Jalon j : roadmap.jalons()) {
             for (RoadmapController.Ticket t : j.tickets()) {
-                if (t.jiraKey() != null) {
+                String cle = t.jiraKey();
+                String epic = epicDuJalon.get(j.id());
+                if (cle == null && epic != null && ticketsIncertains.contains(t.id())) {
+                    cle = jira.chercher(projet, types.story(), t.titre(), epic).orElse(null);
+                    if (cle != null) {
+                        jdbc.sql("UPDATE ticket SET jira_key = ?, jira_incertain = 0 WHERE id = ?").params(cle, t.id()).update();
+                        recuperes++;
+                    }
+                }
+                if (cle != null) {
                     // Ré-export (E-28) : titre, description et Epic parent (le Ticket a pu changer de Jalon).
                     Map<String, Object> champsMaj = new HashMap<>(Map.of("summary", t.titre(), "description", description(t)));
-                    if (epicDuJalon.containsKey(j.id())) {
-                        champsMaj.put("parent", Map.of("key", epicDuJalon.get(j.id())));
+                    if (epic != null) {
+                        champsMaj.put("parent", Map.of("key", epic));
                     }
-                    misesAJour += maj(echecs, t.titre(), t.jiraKey(), champsMaj);
+                    misesAJour += maj(echecs, t.titre(), cle, champsMaj);
                     continue;
                 }
-                if (!epicDuJalon.containsKey(j.id())) {
+                if (epic == null) {
                     echecs.add(new Echec(t.titre(), "Epic de son Jalon non créé."));
                     continue;
                 }
                 aCreer.add(t);
-                champs.add(champs(projet, types.story(), t.titre(), description(t), epicDuJalon.get(j.id())));
+                champs.add(champs(projet, types.story(), t.titre(), description(t), epic));
             }
         }
         int stories = 0;
         for (int debut = 0; debut < champs.size(); debut += LOT) {
             int fin = Math.min(debut + LOT, champs.size());
-            JiraClient.Bulk bulk = jira.creerEnMasse(champs.subList(debut, fin));
+            JiraClient.Bulk bulk;
+            try {
+                bulk = jira.creerEnMasse(champs.subList(debut, fin));
+            } catch (ResponseStatusException e) {
+                throw e;
+            } catch (RuntimeException e) {
+                // Lot entier en échec : chaque Ticket est signalé ; marqué incertain si Jira a pu le créer quand même.
+                for (RoadmapController.Ticket t : aCreer.subList(debut, fin)) {
+                    jdbc.sql("UPDATE ticket SET jira_incertain = ? WHERE id = ?").params(JiraClient.incertain(e), t.id()).update();
+                    echecs.add(new Echec(t.titre(), e.getMessage()));
+                }
+                continue;
+            }
             for (int i = 0; i < bulk.cles().size(); i++) {
                 RoadmapController.Ticket t = aCreer.get(debut + i);
                 String cle = bulk.cles().get(i);
                 if (cle == null) {
+                    jdbc.sql("UPDATE ticket SET jira_incertain = 0 WHERE id = ?").param(t.id()).update();
                     echecs.add(new Echec(t.titre(), bulk.erreurs().getOrDefault(i, "Échec sans détail.")));
                 } else {
-                    jdbc.sql("UPDATE ticket SET jira_key = ? WHERE id = ?").params(cle, t.id()).update();
+                    jdbc.sql("UPDATE ticket SET jira_key = ?, jira_incertain = 0 WHERE id = ?").params(cle, t.id()).update();
                     stories++;
                 }
             }
         }
+
         int liens = 0;
         for (Lien l : jdbc.sql("""
                         SELECT tb.ticket_id, tb.bloque_par_id AS par_id, t.jira_key AS cle, par.jira_key AS par_cle
@@ -140,7 +180,7 @@ class JiraController {
         }
         List<String> orphelines = jdbc.sql("SELECT cle || ' (' || titre || ')' FROM jira_orphelin WHERE spec_id = ? ORDER BY id")
                 .param(specId).query(String.class).list();
-        return new Resultat(projet, epics, stories, liens, misesAJour, echecs, orphelines);
+        return new Resultat(projet, epics, stories, liens, misesAJour, recuperes, echecs, orphelines);
     }
 
     private int maj(List<Echec> echecs, String titre, String cle, Map<String, Object> champs) {

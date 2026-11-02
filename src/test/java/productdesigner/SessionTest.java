@@ -498,6 +498,25 @@ class SessionTest {
         assertThat(send("GET", "/api/sessions/" + id + "/decisions", null)).contains("Retenu");
     }
 
+    @Test
+    void reessayableCalculeSurLHistoriqueMasque() throws Exception {
+        String id = nouvelleSession();
+        assertThat(send("GET", "/api/sessions/" + id, null)).contains("\"reessayable\":false");
+        // Texte sans record, puis la relance masquée échoue (3 x 500 : appel + 2 retries du SDK).
+        reponses.add(stream("Texte seul.", null));
+        String erreur500 = "HTTP 500 {\"type\":\"error\",\"error\":{\"type\":\"api_error\",\"message\":\"boom\"}}";
+        reponses.add(erreur500);
+        reponses.add(erreur500);
+        reponses.add(erreur500);
+        assertThat(send("POST", "/api/sessions/" + id + "/messages", "{\"texte\":\"Salut\"}")).contains("event:erreur", "\"reessayable\":true");
+        // Dernier message visible : la réponse de Claude ; mais l'historique finit par la relance masquée.
+        String detail = send("GET", "/api/sessions/" + id, null);
+        assertThat(detail).contains("\"texte\":\"Texte seul.\"", "\"reessayable\":true");
+        reponses.add(stream("Voilà.", ROUND));
+        assertThat(send("POST", "/api/sessions/" + id + "/reessayer", null)).contains("event:record");
+        assertThat(send("GET", "/api/sessions/" + id, null)).contains("\"reessayable\":false");
+    }
+
     @Autowired
     SessionController sessions;
 

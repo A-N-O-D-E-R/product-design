@@ -40,6 +40,23 @@ class JiraTest {
     static HttpServer fauxJira;
     static final List<String> requetes = new CopyOnWriteArrayList<>();
     static final AtomicInteger numero = new AtomicInteger();
+    /** Issues « créées » par le faux Jira, pour la recherche JQL : clé, titre, Epic parent. */
+    static final List<String[]> creees = new CopyOnWriteArrayList<>();
+    static final com.fasterxml.jackson.databind.ObjectMapper JSON = new com.fasterxml.jackson.databind.ObjectMapper();
+
+    /** Enregistre les issues d'un corps de création (simple ou bulk) et renvoie leurs clés. */
+    static List<String> creer(String corps) throws java.io.IOException {
+        var racine = JSON.readTree(corps);
+        var elements = racine.has("issueUpdates") ? racine.get("issueUpdates") : JSON.createArrayNode().add(racine);
+        List<String> cles = new java.util.ArrayList<>();
+        for (var e : elements) {
+            String cle = "PD-" + numero.incrementAndGet();
+            creees.add(new String[] {cle, e.path("fields").path("summary").asText(), e.path("fields").path("parent").path("key").asText(null)});
+            cles.add(cle);
+        }
+        return cles;
+    }
+
     /** Réponse du bulk, selon le corps reçu ; remplaçable par test. */
     static volatile Function<String, String[]> bulk;
 
@@ -52,12 +69,15 @@ class JiraTest {
     }
 
     static String bulkOk(String corps) {
-        int n = corps.split("\"fields\"", -1).length - 1;
-        StringBuilder sb = new StringBuilder("{\"issues\":[");
-        for (int i = 0; i < n; i++) {
-            sb.append(i > 0 ? "," : "").append("{\"key\":\"PD-").append(numero.incrementAndGet()).append("\"}");
+        try {
+            StringBuilder sb = new StringBuilder("{\"issues\":[");
+            for (String cle : creer(corps)) {
+                sb.append(sb.length() > 11 ? "," : "").append("{\"key\":\"").append(cle).append("\"}");
+            }
+            return sb.append("],\"errors\":[]}").toString();
+        } catch (java.io.IOException e) {
+            throw new IllegalStateException(e);
         }
-        return sb.append("],\"errors\":[]}").toString();
     }
 
     @DynamicPropertySource
@@ -72,8 +92,19 @@ class JiraTest {
                         {"issueTypes":[{"id":"10001","name":"Tâche","hierarchyLevel":0},{"id":"10000","name":"Épopée","hierarchyLevel":1},
                          {"id":"10002","name":"Story","hierarchyLevel":0},{"id":"10003","name":"Sous-tâche","hierarchyLevel":-1}],
                          "total":4,"isLast":true}""");
+            } else if (path.equals("/rest/api/3/search/jql")) {
+                StringBuilder sb = new StringBuilder("{\"issues\":[");
+                for (String[] c : creees) {
+                    sb.append(sb.length() > 11 ? "," : "").append("{\"key\":\"").append(c[0]).append("\",\"fields\":{\"summary\":")
+                            .append(JSON.writeValueAsString(c[1])).append(c[2] == null ? "" : ",\"parent\":{\"key\":\"" + c[2] + "\"}").append("}}");
+                }
+                repondre(ex, 200, sb.append("]}").toString());
             } else if (path.equals("/rest/api/3/issue")) {
-                repondre(ex, 201, "{\"key\":\"PD-" + numero.incrementAndGet() + "\"}");
+                if (corps.contains("\"key\":\"BAD\"")) {
+                    repondre(ex, 400, "{\"errors\":{\"project\":\"Création interdite dans ce projet\"}}");
+                } else {
+                    repondre(ex, 201, "{\"key\":\"" + creer(corps).getFirst() + "\"}");
+                }
             } else if (path.startsWith("/rest/api/3/issue/") && ex.getRequestMethod().equals("PUT")) {
                 ex.sendResponseHeaders(204, -1);
                 ex.close();
@@ -248,6 +279,36 @@ class JiraTest {
         assertThat(c.delai(null, 1)).isBetween(1400L, 2600L);
         assertThat(c.delai(null, 3)).isBetween(5600L, 10400L);
         assertThat(c.delai(null, 10)).isEqualTo(30_000L);
+    }
+
+    @Test
+    void creationIncertaineRetrouveeAuReexportSansDoublon() throws Exception {
+        long spec = roadmap("Incertain");
+        // Jira crée les Stories mais répond 500 (ou la connexion coupe) : l'app ne connaît pas les clés.
+        bulk = c -> {
+            bulkOk(c);
+            return new String[] {"500", "{}"};
+        };
+        String r = post("/api/specs/" + spec + "/export-jira", "{\"projet\":\"PD\"}");
+        assertThat(r).contains("\"storiesCreees\":0", "\"titre\":\"Créer une note\"");
+        int creeesAvant = creees.size();
+
+        requetes.clear();
+        bulk = c -> new String[] {"201", bulkOk(c)};
+        r = post("/api/specs/" + spec + "/export-jira", "{\"projet\":\"PD\"}");
+        assertThat(r).contains("\"storiesCreees\":0", "\"recuperes\":3", "\"echecs\":[]");
+        assertThat(creees).hasSize(creeesAvant);
+        assertThat(requetes).noneMatch(q -> q.startsWith("POST /rest/api/3/issue/bulk"));
+        assertThat(jdbc.sql("SELECT count(*) FROM ticket t JOIN jalon j ON j.id = t.jalon_id WHERE j.spec_id = ? AND t.jira_key IS NULL")
+                .param(spec).query(Integer.class).single()).isZero();
+    }
+
+    @Test
+    void mauvaiseCleDeProjetNeFigePasLaCible() throws Exception {
+        long spec = roadmap("Cible");
+        assertThat(post("/api/specs/" + spec + "/export-jira", "{\"projet\":\"BAD\"}")).contains("Création interdite", "\"epicsCrees\":0");
+        assertThat(jdbc.sql("SELECT jira_projet FROM spec WHERE id = ?").param(spec).query(String.class).optional()).isEmpty();
+        assertThat(post("/api/specs/" + spec + "/export-jira", "{\"projet\":\"PD\"}")).contains("\"projet\":\"PD\"", "\"epicsCrees\":2");
     }
 
     @Test

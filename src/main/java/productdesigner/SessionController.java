@@ -73,7 +73,8 @@ class SessionController {
     // round : Map/List simples, car Spring sérialise avec Jackson 3 et le SDK fournit du Jackson 2.
     record Affichage(long id, String role, String texte, Object round, boolean incomplet) {}
 
-    record SessionDetail(Session session, String projet, List<Affichage> messages) {}
+    /** reessayable : la Session attend une réponse au dernier message de l'utilisateur, masqué ou non (E-34) ; une research en échec se relance plutôt. */
+    record SessionDetail(Session session, String projet, List<Affichage> messages, boolean reessayable) {}
 
     record NouveauMessage(String texte) {}
 
@@ -281,7 +282,10 @@ class SessionController {
                 .map(l -> new Affichage(l.id(), l.role(), texte(l.contenu()), round(l.contenu()), l.incomplet()))
                 .filter(a -> !a.texte().isEmpty() || a.round() != null)
                 .toList();
-        return new SessionDetail(session, projet(session.projetId()).get("nom"), messages);
+        List<Ligne> historique = historique(id);
+        boolean reessayable = session.statut().equals("active") && !"en_cours".equals(session.tache()) && !repondent.contains(id)
+                && !historique.isEmpty() && historique.getLast().role().equals("user") && !"echec".equals(session.tache());
+        return new SessionDetail(session, projet(session.projetId()).get("nom"), messages, reessayable);
     }
 
     /** Remplissage du contexte : taille du prompt du dernier appel (entrée + cache lu + cache écrit), sur la fenêtre du modèle (D-28). */

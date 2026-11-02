@@ -9,7 +9,7 @@ import { PrototypeFrame } from '@/components/PrototypeFrame'
 import { RoundCard } from '@/components/RoundCard'
 import { api, postSse, type Affichage, type Artefact, type Round, type Session } from '@/lib/api'
 
-type Detail = { session: Session; projet: string; messages: Affichage[] }
+type Detail = { session: Session; projet: string; messages: Affichage[]; reessayable: boolean }
 type Contexte = { tokens: number; fenetre: number; remplissage: number; seuilAtteint: boolean }
 
 export function SessionPage({ id }: { id: number }) {
@@ -30,8 +30,7 @@ export function SessionPage({ id }: { id: number }) {
     api<Detail>(`/api/sessions/${id}`).then((d) => {
       setDetail(d)
       setMessages(d.messages)
-      const dernier = d.messages.at(-1)
-      setReessayable(dernier !== undefined && (dernier.role === 'user' || !!dernier.incomplet))
+      setReessayable(d.reessayable)
     }, (e) => setErreur(e.message))
   }, [id])
 
@@ -94,7 +93,16 @@ export function SessionPage({ id }: { id: number }) {
         }
       })
     } catch (err) {
+      // Refus avant tout stream (Session close, réponse déjà en cours…) : on recale le fil sur le serveur,
+      // ce qui retire le message affiché par anticipation.
       setErreur((err as Error).message)
+      const d = await api<Detail>(`/api/sessions/${id}`)
+      setDetail(d)
+      setMessages(d.messages)
+      setReessayable(d.reessayable)
+      setEnCours(undefined)
+      setVersion((v) => v + 1)
+      return
     }
     if (reponse || round) setMessages((m) => [...m, { id: -Date.now(), role: 'assistant', texte: reponse, round, incomplet }])
     setEnCours(undefined)
