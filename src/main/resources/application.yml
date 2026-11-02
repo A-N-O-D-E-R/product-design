@@ -1,0 +1,26 @@
+spring:
+  web:
+    error:
+      include-message: always
+  application:
+    name: productdesigner
+  config:
+    import: optional:file:${user.home}/.productdesigner/application.yml
+  threads:
+    virtual:
+      enabled: true
+  datasource:
+    url: jdbc:sqlite:${productdesigner.data-dir:${user.home}/.productdesigner}/data.db?foreign_keys=on&busy_timeout=5000
+    hikari:
+      # ponytail: une seule connexion évite SQLITE_BUSY ; mono-utilisateur, suffisant.
+      maximum-pool-size: 1
+
+productdesigner:
+  # $ par million de tokens (prix API Anthropic). cache-write : écriture de cache 5 min (1,25 × input).
+  tarifs:
+    claude-opus-5-5: { input: 4.00, output: 20.00, cache-read: 0.20, cache-write: 5.00 }
+    claude-sonnet-5-5: { input: 2.00, output: 10.00, cache-read: 0.20, cache-write: 2.50 }
+  # Bandeau « Continuer dans une nouvelle Session » (D-28) : prompt du dernier appel / fenêtre du modèle >= seuil.
+  contexte:
+    fenetre: 1000000
+    seuil: 0.8

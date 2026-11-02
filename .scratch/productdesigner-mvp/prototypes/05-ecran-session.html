@@ -1,0 +1,110 @@
+<!doctype html>
+<!-- Prototype rough, issue 05. Jetable. Ouvrir dans un navigateur. -->
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Session — prototype</title>
+<style>
+  body { margin: 0; font: 14px/1.45 system-ui, sans-serif; display: grid; grid-template-columns: 1fr 320px; grid-template-rows: auto 1fr; height: 100vh; color: #222; }
+  header { grid-column: 1 / -1; padding: 8px 16px; border-bottom: 1px solid #ddd; display: flex; gap: 12px; align-items: center; }
+  header small { color: #777; }
+  main { overflow: auto; padding: 16px 24px; }
+  aside { border-left: 1px solid #ddd; overflow: auto; padding: 12px 16px; background: #fafafa; }
+  .msg { max-width: 720px; margin: 0 0 16px; }
+  .user { margin-left: auto; background: #eef3ff; padding: 8px 12px; border-radius: 8px; white-space: pre-wrap; }
+  .round { border: 1px solid #ccd; border-radius: 8px; padding: 12px; max-width: 720px; margin-bottom: 16px; }
+  .q { padding: 8px 0; border-top: 1px dashed #ddd; }
+  .q:first-of-type { border-top: 0; }
+  .reco { color: #555; background: #fff8e1; padding: 4px 8px; border-radius: 4px; margin: 4px 0; }
+  textarea { width: 100%; box-sizing: border-box; min-height: 40px; font: inherit; }
+  button { font: inherit; cursor: pointer; }
+  .proposed { border: 1px solid #f0c36d; background: #fffbea; padding: 8px; border-radius: 6px; margin: 6px 0; }
+  .decision { padding: 6px 0; border-bottom: 1px solid #eee; }
+  h3 { margin: 16px 0 6px; font-size: 13px; text-transform: uppercase; color: #666; }
+  .free { position: sticky; bottom: 0; background: #fff; padding-top: 8px; max-width: 720px; display: flex; gap: 8px; }
+</style>
+</head>
+<body>
+<header>
+  <strong>productDesigner MVP</strong>
+  <span>Session · Question 04 « Gabarit de la spec »</span>
+  <small>méthode : grilling</small>
+</header>
+
+<main id="chat">
+  <div class="msg">Je vais trancher le gabarit de la spec en quelques rounds. Voici le premier.</div>
+
+  <div class="round" id="round">
+    <strong>Round 1</strong>
+    <div class="q" data-id="Q1">
+      <b>Q1.</b> Gabarit fixe ou adapté au Projet ?
+      <div class="reco">Reco : socle fixe + sections optionnelles.</div>
+      <label><input type="checkbox" class="accept" checked> Accepter la reco</label>
+      <textarea placeholder="…ou ta réponse"></textarea>
+    </div>
+    <div class="q" data-id="Q2">
+      <b>Q2.</b> Niveau de détail ?
+      <div class="reco">Reco : le quoi, pas le comment.</div>
+      <label><input type="checkbox" class="accept" checked> Accepter la reco</label>
+      <textarea placeholder="…ou ta réponse"></textarea>
+    </div>
+    <button id="send">Envoyer les réponses</button>
+  </div>
+
+  <div class="free">
+    <textarea placeholder="Message libre (hors round)"></textarea>
+    <button>Envoyer</button>
+  </div>
+</main>
+
+<aside>
+  <h3>Décisions proposées</h3>
+  <div id="proposed"><small>Aucune pour l'instant.</small></div>
+
+  <h3>Décisions</h3>
+  <div id="decisions">
+    <div class="decision">D-1 · Licence MIT, notice conservée</div>
+    <div class="decision">D-2 · SDK Java Anthropic en direct</div>
+  </div>
+
+  <h3>Questions ouvertes</h3>
+  <ul id="open">
+    <li>05 · Écran de Session</li>
+    <li>07 · Modèle de données</li>
+    <li>08 · Génération roadmap / Tickets</li>
+  </ul>
+</aside>
+
+<script>
+  let n = 3;
+  document.getElementById('send').onclick = () => {
+    const qs = [...document.querySelectorAll('#round .q')];
+    const lines = qs.map(q => {
+      const own = q.querySelector('textarea').value.trim();
+      const reco = q.querySelector('.reco').textContent.replace('Reco : ', '');
+      return { id: q.dataset.id, text: own || (q.querySelector('.accept').checked ? reco : '(sans réponse)') };
+    });
+    const user = document.createElement('div');
+    user.className = 'msg user';
+    user.textContent = lines.map(l => `${l.id}: ${l.text}`).join('\n');
+    document.querySelector('.free').before(user);
+    document.getElementById('round').remove();
+
+    const box = document.getElementById('proposed');
+    box.innerHTML = '';
+    lines.forEach(l => {
+      const p = document.createElement('div');
+      p.className = 'proposed';
+      p.innerHTML = `${l.id} → ${l.text}<br><button>Confirmer</button> <button>Modifier</button>`;
+      p.querySelector('button').onclick = () => {
+        const d = document.createElement('div');
+        d.className = 'decision';
+        d.textContent = `D-${n++} · ${l.text}`;
+        document.getElementById('decisions').append(d);
+        p.remove();
+      };
+      box.append(p);
+    });
+  };
+</script>
+</body>
