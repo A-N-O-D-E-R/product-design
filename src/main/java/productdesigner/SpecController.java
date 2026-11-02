@@ -166,8 +166,9 @@ class SpecController {
         if (sections.containsKey(titre)) {
             return titre;
         }
-        String numero = titre.substring(0, titre.indexOf('.') + 1);
-        return sections.keySet().stream().filter(t -> t.startsWith(numero)).findFirst().orElse(titre);
+        // « 1. Problème » mais pas « 10. Annexes » ni « 1.1 Détail ».
+        Pattern numero = Pattern.compile("^" + Pattern.quote(titre.substring(0, titre.indexOf('.') + 1)) + "(\\s|$)");
+        return sections.keySet().stream().filter(t -> numero.matcher(t).find()).findFirst().orElse(titre);
     }
 
     /** Chaque exigence E-n de la section 5 doit citer au moins une Décision D-n existante (E-21). */

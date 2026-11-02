@@ -1,3 +1,7 @@
+server:
+  # Mono-utilisateur sans authentification (D-3) : jamais exposé au réseau.
+  address: 127.0.0.1
+
 spring:
   web:
     error:

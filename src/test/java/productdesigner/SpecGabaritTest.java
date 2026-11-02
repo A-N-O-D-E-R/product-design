@@ -59,4 +59,10 @@ class SpecGabaritTest {
                 "E-4 cite D-8, inconnue(s).",
                 "E-3 ne cite aucune Décision existante.");
     }
+
+    @Test
+    void sectionDuSocleReconnueParSonNumeroExact() {
+        String spec = SpecController.normaliser("# S\n\n## 10. Annexes\nA\n\n## 1. Problème\nP\n");
+        assertThat(spec).contains("## 1. Problème et Destination\n\nP", "## 10. Annexes\n\nA");
+    }
 }

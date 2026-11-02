@@ -76,6 +76,15 @@ class SessionTest {
             if (reponse == null) {
                 reponse = stream("Rien.", null);
             }
+            if (reponse.startsWith("LENT ")) {
+                // "LENT <réponse>" : répond après 1,5 s, pour tester les envois concurrents.
+                try {
+                    Thread.sleep(1500);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                reponse = reponse.substring(5);
+            }
             if (reponse.startsWith("HTTP ")) {
                 // "HTTP <code> <corps JSON>" : erreur de l'API.
                 String[] parts = reponse.split(" ", 3);
@@ -351,6 +360,21 @@ class SessionTest {
     }
 
     @Test
+    void requeteDepuisUnAutreSiteRefusee() throws Exception {
+        for (String origine : new String[] {"https://evil.example", "http://localhost.evil.example"}) {
+            HttpResponse<String> r = HttpClient.newHttpClient().send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/projets"))
+                    .header("Origin", origine).header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString("{\"nom\":\"csrf\"}")).build(), HttpResponse.BodyHandlers.ofString());
+            assertThat(r.statusCode()).as(origine).isEqualTo(403);
+        }
+        HttpResponse<String> local = HttpClient.newHttpClient().send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/projets"))
+                .header("Origin", "http://localhost:5173").header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString("{\"nom\":\"vite\"}")).build(), HttpResponse.BodyHandlers.ofString());
+        assertThat(local.statusCode()).isEqualTo(201);
+        assertThat(send("GET", "/api/projets", null)).doesNotContain("csrf");
+    }
+
+    @Test
     void requeteDepuisUneIframeSandboxRefusee() throws Exception {
         HttpResponse<String> r = HttpClient.newHttpClient().send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/projets"))
                 .header("Origin", "null").header("Content-Type", "text/plain")
@@ -412,6 +436,68 @@ class SessionTest {
         assertThat(send("GET", "/api/specs/" + specId + "/roadmap", null)).contains("Socle v2").doesNotContain("\"titre\":\"Socle\"");
     }
 
+    @Test
+    void uneSeuleReponseALaFoisParSession() throws Exception {
+        String id = nouvelleSession();
+        reponses.add("LENT " + stream("Lente.", ROUND));
+        var premier = HttpClient.newHttpClient().sendAsync(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/sessions/" + id + "/messages"))
+                .header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString("{\"texte\":\"Un\"}")).build(),
+                HttpResponse.BodyHandlers.ofString());
+        Thread.sleep(400);
+        assertThat(send("POST", "/api/sessions/" + id + "/messages", "{\"texte\":\"Deux\"}")).contains("Une réponse est déjà en cours");
+        assertThat(send("POST", "/api/sessions/" + id + "/clore", null)).contains("Une réponse est déjà en cours");
+        assertThat(premier.get().body()).contains("event:record");
+        // Verrou libéré : l'échange suivant passe, et « Deux » n'a jamais été enregistré.
+        reponses.add(stream("Ok.", ROUND));
+        assertThat(send("POST", "/api/sessions/" + id + "/messages", "{\"texte\":\"Trois\"}")).contains("event:record");
+        assertThat(send("GET", "/api/sessions/" + id, null)).doesNotContain("Deux");
+    }
+
+    @Test
+    void pauseTurnGereeDansUneSessionInteractive() throws Exception {
+        String projet = send("POST", "/api/projets", "{\"nom\":\"Pause\"}").replaceAll(".*\"id\":(\\d+),.*", "$1");
+        String id = send("POST", "/api/projets/" + projet + "/sessions", "{\"methode\":\"research\"}").replaceAll(".*?\"id\":(\\d+),.*", "$1");
+        reponses.add(streamPause());
+        reponses.add(stream("Voilà la suite.", ROUND));
+        String sse = send("POST", "/api/sessions/" + id + "/messages", "{\"texte\":\"Cherche encore\"}");
+        assertThat(requetes).hasSize(2);
+        assertThat(requetes.get(1)).contains("ENC-SECRET-123");
+        assertThat(sse).contains("event:record").doesNotContain("avertissement");
+    }
+
+    @Test
+    void roadmapRegenereeEnEchecNeDetruitPasLAncienne() throws Exception {
+        String projetId = send("POST", "/api/projets", "{\"nom\":\"Atomique\"}").replaceAll(".*\"id\":(\\d+),.*", "$1");
+        reponses.add(stream("# Spec\n", null));
+        send("POST", "/api/projets/" + projetId + "/specs", null);
+        String specId = send("GET", "/api/projets/" + projetId + "/specs", null).replaceAll(".*?\"id\":(\\d+),.*", "$1");
+        String ok = "{\"jalons\":[{\"titre\":\"Ancien\",\"tickets\":[{\"titre\":\"T\",\"corps\":\"c\",\"criteres\":[],\"exigences\":[],\"blockedBy\":[]}]}]}";
+        reponses.add(stream(ok, null));
+        send("POST", "/api/specs/" + specId + "/roadmap", null);
+
+        // 2e Jalon sans titre : NOT NULL violé à mi-parcours.
+        String casse = "{\"jalons\":[{\"titre\":\"Nouveau\",\"tickets\":[]},{\"titre\":null,\"tickets\":[]}]}";
+        reponses.add(stream(casse, null));
+        assertThat(send("POST", "/api/specs/" + specId + "/roadmap", null)).contains("event:erreur");
+        assertThat(send("GET", "/api/specs/" + specId + "/roadmap", null)).contains("\"titre\":\"Ancien\"").doesNotContain("Nouveau");
+    }
+
+    @Test
+    void relancerRefuseSiDesDecisionsSontConfirmees() throws Exception {
+        String projetId = send("POST", "/api/projets", "{\"nom\":\"RelanceDecision\"}").replaceAll(".*\"id\":(\\d+),.*", "$1");
+        String carte = send("POST", "/api/projets/" + projetId + "/questions", "{\"titre\":\"F\",\"corps\":\"\",\"type\":\"research\",\"blockedBy\":[]}");
+        String q = carte.replaceAll(".*\"questions\":\\[\\{\"id\":(\\d+),.*", "$1");
+        reponses.add(stream("# Rapport\n\nFait.", """
+                {"round":{"questions":[]},"decisions":[{"texte":"Retenu"}],"questions":[],"map":{"destination":"","brouillard":[],"hors_perimetre":[]},"prototype_html":""}"""));
+        String id = send("POST", "/api/projets/" + projetId + "/questions/" + q + "/sessions", null).replaceAll(".*?\"id\":(\\d+),.*", "$1");
+        attendreFin(id);
+        String messageId = send("GET", "/api/sessions/" + id + "/decisions", null).replaceAll(".*?\"messageId\":(\\d+).*", "$1");
+        send("POST", "/api/sessions/" + id + "/decisions", "{\"messageId\":" + messageId + ",\"indice\":0,\"texte\":\"Retenu\"}");
+        jdbc.sql("UPDATE session SET tache = 'echec' WHERE id = ?").param(id).update();
+        assertThat(send("POST", "/api/sessions/" + id + "/relancer", null)).contains("Des Décisions de cette research sont déjà confirmées");
+        assertThat(send("GET", "/api/sessions/" + id + "/decisions", null)).contains("Retenu");
+    }
+
     @Autowired
     SessionController sessions;
 
@@ -441,6 +527,7 @@ class SessionTest {
         // Repart de zéro : seule la consigne, sans les messages de la tentative ratée.
         assertThat(requetes.getFirst()).contains(SessionController.RESEARCH).doesNotContain("ENC-SECRET-123", "Encore une pause");
         assertThat(send("POST", "/api/sessions/" + id + "/relancer", null)).contains("Seule une research en échec");
+        assertThat(jdbc.sql("SELECT count(*) FROM artefact WHERE session_id = ?").param(id).query(Integer.class).single()).isEqualTo(1);
     }
 
     String attendreFin(String id) throws Exception {

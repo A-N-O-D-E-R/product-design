@@ -111,4 +111,30 @@ class MapTest {
         jdbc.sql("UPDATE question SET statut = 'resolved' WHERE id = ?").param(q1).update();
         assertThat(send("GET", p + "/map", null).body()).contains("\"blockedBy\":[1],\"ouvrable\":true");
     }
+
+    @Autowired
+    MapController maps;
+
+    @Test
+    void bloquanteHorsPerimetreLeveLeBlocageEtCyclesRefuses() throws Exception {
+        String p = "/api/projets/" + id(send("POST", "/api/projets", "{\"nom\":\"Cycle\"}").body());
+        send("POST", p + "/questions", "{\"titre\":\"A\",\"corps\":\"\",\"type\":\"grilling\",\"blockedBy\":[]}");
+        send("POST", p + "/questions", "{\"titre\":\"B\",\"corps\":\"\",\"type\":\"grilling\",\"blockedBy\":[1]}");
+        send("POST", p + "/questions", "{\"titre\":\"C\",\"corps\":\"\",\"type\":\"grilling\",\"blockedBy\":[2]}");
+        String qa = jdbc.sql("SELECT id FROM question WHERE titre = 'A' ORDER BY id DESC LIMIT 1").query(String.class).single();
+        long projet = jdbc.sql("SELECT projet_id FROM question WHERE id = ?").param(qa).query(Long.class).single();
+
+        // A bloquée par C fermerait A → C → B → A.
+        HttpResponse<String> r = send("PUT", p + "/questions/" + qa, "{\"titre\":\"A\",\"corps\":\"\",\"type\":\"grilling\",\"blockedBy\":[3]}");
+        assertThat(r.statusCode()).isEqualTo(400);
+        assertThat(r.body()).contains("Dépendance circulaire");
+        // Même cycle proposé par le LLM : ignoré.
+        maps.appliquer(projet, new com.fasterxml.jackson.databind.ObjectMapper().readTree("""
+                {"questions":[{"titre":"A","corps":"","type":"grilling","blocked_by":["C"]}],"map":{}}"""));
+        assertThat(send("GET", p + "/map", null).body()).contains("\"numero\":1,\"titre\":\"A\",\"corps\":\"\",\"type\":\"grilling\",\"statut\":\"open\",\"blockedBy\":[]");
+
+        // A sort du périmètre : B n'est plus bloquée.
+        send("POST", p + "/questions/" + qa + "/hors-perimetre", null);
+        assertThat(send("GET", p + "/map", null).body()).contains("\"titre\":\"B\",\"corps\":\"\",\"type\":\"grilling\",\"statut\":\"open\",\"blockedBy\":[1],\"ouvrable\":true");
+    }
 }

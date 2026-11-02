@@ -12,6 +12,7 @@ import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -63,5 +64,13 @@ class SocleTest {
         assertThat(dataDir.resolve("data.db")).exists();
         assertThat(jdbc.sql("select count(*) from flyway_schema_history where success = 0")
                 .query(Integer.class).single()).isZero();
+    }
+
+    @Value("${server.address}")
+    String adresse;
+
+    @Test
+    void ecouteSeulementEnLocal() {
+        assertThat(adresse).isEqualTo("127.0.0.1");
     }
 }

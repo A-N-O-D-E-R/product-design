@@ -24,7 +24,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -75,11 +77,13 @@ class RoadmapController {
 
     private final JdbcClient jdbc;
     private final Anthropic anthropic;
+    private final TransactionTemplate transaction;
     private final String prompt;
 
-    RoadmapController(JdbcClient jdbc, Anthropic anthropic) throws IOException {
+    RoadmapController(JdbcClient jdbc, Anthropic anthropic, PlatformTransactionManager transactions) throws IOException {
         this.jdbc = jdbc;
         this.anthropic = anthropic;
+        this.transaction = new TransactionTemplate(transactions);
         this.prompt = new ClassPathResource("prompts/roadmap.md").getContentAsString(StandardCharsets.UTF_8)
                 .replaceAll("(?s)<!--.*?-->", "").strip();
     }
@@ -151,7 +155,8 @@ class RoadmapController {
                 }
                 RoadmapGeneree roadmap = accumulator.message(RoadmapGeneree.class).content().stream()
                         .flatMap(b -> b.text().stream()).findFirst().orElseThrow().text();
-                List<String> avertissements = enregistrer(specId, roadmap, exigences(spec));
+                // Appel depuis ce thread, hors proxy Spring : la transaction est explicite (tout ou rien).
+                List<String> avertissements = transaction.execute(t -> enregistrer(specId, roadmap, exigences(spec)));
                 emitter.send(SseEmitter.event().name("fin").data(Map.of("avertissements", avertissements)));
                 emitter.complete();
             } catch (Exception e) {

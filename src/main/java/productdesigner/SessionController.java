@@ -4,6 +4,10 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import com.anthropic.client.AnthropicClient;
 import com.anthropic.core.ObjectMappers;
@@ -79,6 +83,8 @@ class SessionController {
     private final Anthropic anthropic;
     private final Methodes methodes;
     private final MapController map;
+    /** Sessions dont une réponse est en cours de stream. */
+    private final Set<Long> repondent = ConcurrentHashMap.newKeySet();
     private final long fenetre;
     private final double seuil;
 
@@ -129,30 +135,51 @@ class SessionController {
         long id = session.id();
         Thread.ofVirtual().start(() -> {
             try {
-                Message message = tour(client, session, t -> {});
-                int recherches = recherches(message);
-                for (int pauses = 0; message.stopReason().filter(StopReason.PAUSE_TURN::equals).isPresent(); pauses++) {
-                    if (pauses == PAUSES_MAX) {
-                        throw new IllegalStateException("trop de pauses serveur");
-                    }
-                    progression(id, "Recherche en cours : " + recherches + " recherche(s) web…");
-                    message = tour(client, session, t -> {});
-                    recherches += recherches(message);
-                }
-                String rapport = message.content().stream().flatMap(b -> b.text().stream()).map(t -> t.text())
-                        .reduce("", String::concat).strip();
+                int[] recherches = {0};
+                List<Message> messages = tourComplet(client, session, t -> {}, () -> progression(id,
+                        "Recherche en cours : " + recherches[0] + " recherche(s) web…"));
+                messages.forEach(m -> recherches[0] += recherches(m));
+                String rapport = rapport(messages);
                 if (rapport.isEmpty()) {
                     throw new IllegalStateException("aucun rapport rédigé");
                 }
+                Message dernier = messages.getLast();
+                Record.appel(dernier).ifPresent(a -> map.appliquer(session.projetId(), Record.input(a)));
                 jdbc.sql("INSERT INTO artefact (session_id, type, contenu) VALUES (?, 'research_md', ?)").params(id, rapport).update();
-                Record.appel(message).ifPresent(a -> map.appliquer(session.projetId(), Record.input(a)));
                 jdbc.sql("UPDATE session SET tache = 'terminee', progression = ? WHERE id = ?")
-                        .params("Terminée : " + recherches + " recherche(s) web.", id).update();
-            } catch (Exception e) {
+                        .params("Terminée : " + recherches[0] + " recherche(s) web.", id).update();
+            } catch (Throwable e) {
                 log.warn("Échec de la research de la Session {}", id, e);
-                jdbc.sql("UPDATE session SET tache = 'echec', progression = ? WHERE id = ?").params(messageErreur(e), id).update();
+                echec(id, e instanceof Exception ex ? messageErreur(ex) : "Erreur interne : " + e);
+            } finally {
+                // Filet : quoi qu'il arrive, la research ne reste pas « en cours » (sinon la Session est bloquée).
+                echec(id, "Interrompue par une erreur interne.");
             }
         });
+    }
+
+    /** Passe une research encore en cours en échec ; sans effet si elle est déjà terminée ou en échec. */
+    private void echec(long id, String message) {
+        try {
+            jdbc.sql("UPDATE session SET tache = 'echec', progression = ? WHERE id = ? AND tache = 'en_cours'").params(message, id).update();
+        } catch (RuntimeException e) {
+            log.error("Impossible de marquer la research {} en échec", id, e);
+        }
+    }
+
+    /**
+     * Rapport de research : texte de tout le tour (il peut avoir été rédigé à cheval sur une pause_turn), à partir
+     * du dernier titre `# ` pour écarter les messages intermédiaires ; tout le texte s'il n'y a pas de titre.
+     */
+    static String rapport(List<Message> messages) {
+        String texte = messages.stream().flatMap(m -> m.content().stream()).flatMap(b -> b.text().stream()).map(t -> t.text())
+                .reduce("", String::concat);
+        Matcher titre = Pattern.compile("(?m)^# ").matcher(texte);
+        int debut = -1;
+        while (titre.find()) {
+            debut = titre.start();
+        }
+        return (debut >= 0 ? texte.substring(debut) : texte).strip();
     }
 
     /** Au démarrage, une research restée en cours a perdu son thread : elle passe en échec, relançable (E-16). */
@@ -173,9 +200,15 @@ class SessionController {
         if (!"echec".equals(session.tache()) || !session.statut().equals("active")) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Seule une research en échec se relance.");
         }
+        if (jdbc.sql("SELECT count(*) FROM decision WHERE session_id = ?").param(id).query(Integer.class).single() > 0) {
+            // Relancer efface les messages, donc en cascade les Décisions confirmées qui en viennent.
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Des Décisions de cette research sont déjà confirmées : clore la Session plutôt que la relancer.");
+        }
         var client = anthropic.client();
         jdbc.sql("DELETE FROM message WHERE session_id = ? AND id > (SELECT min(id) FROM message WHERE session_id = ?)")
                 .params(id, id).update();
+        jdbc.sql("DELETE FROM artefact WHERE session_id = ?").param(id).update();
         jdbc.sql("UPDATE session SET tache = 'en_cours', progression = 'Relancée…' WHERE id = ?").param(id).update();
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
@@ -302,8 +335,14 @@ class SessionController {
         }
         Session session = active(id);
         var client = anthropic.client();
-        enregistrer(id, "user", messageUtilisateur(id, nouveau.texte().strip()), true);
-        return repondre(client, session);
+        reserver(id);
+        try {
+            enregistrer(id, "user", messageUtilisateur(id, nouveau.texte().strip()), true);
+            return repondre(client, session);
+        } catch (RuntimeException e) {
+            repondent.remove(id);
+            throw e;
+        }
     }
 
     /** Relance la réponse au dernier message de l'utilisateur, après une coupure ou une erreur (D-30). */
@@ -315,7 +354,13 @@ class SessionController {
         if (historique.isEmpty() || !historique.getLast().role().equals("user")) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Rien à réessayer : la dernière réponse est complète.");
         }
-        return repondre(client, session);
+        reserver(id);
+        try {
+            return repondre(client, session);
+        } catch (RuntimeException e) {
+            repondent.remove(id);
+            throw e;
+        }
     }
 
     private SseEmitter repondre(AnthropicClient client, Session session) {
@@ -323,13 +368,15 @@ class SessionController {
         SseEmitter emitter = new SseEmitter(0L);
         Deltas deltas = t -> emitter.send(SseEmitter.event().name("delta").data(Map.of("texte", t)));
         Thread.ofVirtual().start(() -> {
+            boolean pendantLeTour = true;
             try {
-                Message message = tour(client, session, deltas);
+                Message message = tourComplet(client, session, deltas, () -> {}).getLast();
                 if (Record.appel(message).isEmpty() && message.stopReason().filter(StopReason.END_TURN::equals).isPresent()) {
                     // Une relance (D-18), masquée dans le fil.
                     enregistrer(id, "user", MessageParam.ofUser(Record.RELANCE), false);
-                    message = tour(client, session, deltas);
+                    message = tourComplet(client, session, deltas, () -> {}).getLast();
                 }
+                pendantLeTour = false;
                 var appel = Record.appel(message);
                 if (appel.isPresent()) {
                     map.appliquer(session.projetId(), Record.input(appel.get()));
@@ -349,14 +396,24 @@ class SessionController {
             } catch (Exception e) {
                 log.warn("Échec de la réponse dans la Session {}", id, e);
                 try {
-                    emitter.send(SseEmitter.event().name("erreur").data(Map.of("message", messageErreur(e), "reessayable", true)));
+                    // Réessayer n'a de sens que si l'échec est survenu avant la fin de la réponse du LLM.
+                    emitter.send(SseEmitter.event().name("erreur").data(Map.of("message", messageErreur(e), "reessayable", pendantLeTour)));
                     emitter.complete();
                 } catch (IOException | IllegalStateException ignored) {
                     emitter.completeWithError(e);
                 }
+            } finally {
+                repondent.remove(id);
             }
         });
         return emitter;
+    }
+
+    /** Une seule réponse à la fois par Session (deux onglets, double clic) ; libérée à la fin du thread de réponse. */
+    private void reserver(long id) {
+        if (!repondent.add(id)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Une réponse est déjà en cours dans cette Session.");
+        }
     }
 
     /** Erreurs non récupérables en clair (D-30) ; 408/409/429/5xx et réseau passent d'abord par les 2 retries du SDK. */
@@ -370,6 +427,22 @@ class SessionController {
                     : "Requête refusée par l'API Anthropic : " + b.getMessage();
         }
         return "Réponse interrompue : " + e.getMessage();
+    }
+
+    /**
+     * Un tour complet : relance chaque pause_turn avec l'historique tel quel (blocs encrypted_content compris),
+     * {@value #PAUSES_MAX} fois au plus. Renvoie les messages du tour, le dernier portant la fin réelle.
+     */
+    private List<Message> tourComplet(AnthropicClient client, Session session, Deltas deltas, Runnable apresPause) throws IOException {
+        List<Message> messages = new ArrayList<>(List.of(tour(client, session, deltas)));
+        while (messages.getLast().stopReason().filter(StopReason.PAUSE_TURN::equals).isPresent()) {
+            if (messages.size() > PAUSES_MAX) {
+                throw new IllegalStateException("trop de pauses serveur");
+            }
+            apresPause.run();
+            messages.add(tour(client, session, deltas));
+        }
+        return messages;
     }
 
     /**
@@ -477,6 +550,9 @@ class SessionController {
         }
         if ("en_cours".equals(session.tache())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Research en cours : attendre la fin.");
+        }
+        if (repondent.contains(id)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Une réponse est déjà en cours dans cette Session.");
         }
         return session;
     }

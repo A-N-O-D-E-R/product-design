@@ -121,24 +121,27 @@ class MapController {
                     .update();
         }
         for (JsonNode q : input.path("questions")) {
+            Long id = idParTitre(projetId, q.path("titre").asText().strip());
             for (JsonNode par : q.path("blocked_by")) {
-                jdbc.sql("""
-                                INSERT OR IGNORE INTO question_bloquee (question_id, bloquee_par_id)
-                                SELECT q.id, par.id FROM question q, question par
-                                WHERE q.projet_id = ? AND q.titre = ? AND par.projet_id = ? AND par.titre = ? AND q.id <> par.id""")
-                        .params(projetId, q.path("titre").asText().strip(), projetId, par.asText().strip())
-                        .update();
+                Long parId = idParTitre(projetId, par.asText().strip());
+                // Dépendance inconnue ou qui fermerait un cycle : ignorée (elle rendrait des Questions inouvrables).
+                if (id != null && parId != null && !cycle(id, parId)) {
+                    jdbc.sql("INSERT OR IGNORE INTO question_bloquee (question_id, bloquee_par_id) VALUES (?, ?)").params(id, parId).update();
+                }
             }
         }
     }
 
-    /** Questions `open` dont toutes les bloquantes sont `resolved`, par numéro (E-4). */
+    /**
+     * Questions `open` dont toutes les bloquantes sont `resolved`, par numéro (E-4). Une bloquante sortie du
+     * périmètre ne bloque plus : sa décision ne sera jamais prise.
+     */
     List<Long> frontiere(long projetId) {
         return jdbc.sql("""
                         SELECT q.id FROM question q
                         WHERE q.projet_id = ? AND q.statut = 'open'
                           AND NOT EXISTS (SELECT 1 FROM question_bloquee qb JOIN question par ON par.id = qb.bloquee_par_id
-                                          WHERE qb.question_id = q.id AND par.statut <> 'resolved')
+                                          WHERE qb.question_id = q.id AND par.statut NOT IN ('resolved', 'hors_perimetre'))
                         ORDER BY q.numero""")
                 .param(projetId).query(Long.class).list();
     }
@@ -228,11 +231,26 @@ class MapController {
             long par = jdbc.sql("SELECT id FROM question WHERE projet_id = ? AND numero = ?").params(projetId, numero)
                     .query(Long.class).optional()
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Question " + numero + " introuvable."));
-            if (par == id) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Une Question ne peut pas se bloquer elle-même.");
+            if (cycle(id, par)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Dépendance circulaire : la Question " + numero + " dépend déjà de celle-ci.");
             }
             jdbc.sql("INSERT OR IGNORE INTO question_bloquee (question_id, bloquee_par_id) VALUES (?, ?)").params(id, par).update();
         }
+    }
+
+    private Long idParTitre(long projetId, String titre) {
+        return jdbc.sql("SELECT id FROM question WHERE projet_id = ? AND titre = ?").params(projetId, titre).query(Long.class).optional().orElse(null);
+    }
+
+    /** Vrai si « id bloquée par par » fermerait un cycle : par est elle-même (transitivement) bloquée par id. */
+    boolean cycle(long id, long par) {
+        return id == par || jdbc.sql("""
+                        WITH RECURSIVE amont(qid) AS (
+                            SELECT bloquee_par_id FROM question_bloquee WHERE question_id = ?
+                            UNION SELECT qb.bloquee_par_id FROM question_bloquee qb JOIN amont ON qb.question_id = amont.qid)
+                        SELECT count(*) FROM amont WHERE qid = ?""")
+                .params(par, id).query(Integer.class).single() > 0;
     }
 
     private void trouverQuestion(long projetId, long id) {
