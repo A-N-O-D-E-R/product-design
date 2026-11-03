@@ -13,6 +13,7 @@ import com.anthropic.client.AnthropicClient;
 import com.anthropic.core.ObjectMappers;
 import com.anthropic.core.http.StreamResponse;
 import com.anthropic.errors.BadRequestException;
+import com.anthropic.errors.NotFoundException;
 import com.anthropic.errors.PermissionDeniedException;
 import com.anthropic.errors.UnauthorizedException;
 import com.anthropic.helpers.MessageAccumulator;
@@ -380,10 +381,20 @@ class SessionController {
             boolean pendantLeTour = true;
             try {
                 Message message = tourComplet(client, session, deltas, () -> {}).getLast();
-                if (Record.appel(message).isEmpty() && message.stopReason().filter(StopReason.END_TURN::equals).isPresent()) {
+                var premier = Record.appel(message);
+                List<String> erreurs = premier.map(a -> Record.erreurs(Record.input(a))).orElse(List.of());
+                if (premier.isEmpty() && message.stopReason().filter(StopReason.END_TURN::equals).isPresent()) {
                     // Une relance (D-18), masquée dans le fil.
                     enregistrer(id, "user", MessageParam.ofUser(Record.RELANCE), false);
                     message = tourComplet(client, session, deltas, () -> {}).getLast();
+                } else if (!erreurs.isEmpty()) {
+                    // record non conforme (schéma non strict) : une relance masquée, avec le tool_result attendu.
+                    log.info("record non conforme dans la Session {} : {}", id, erreurs);
+                    enregistrer(id, "user", messageUtilisateur(id, Record.relanceInvalide(erreurs)), false);
+                    Message corrige = tourComplet(client, session, deltas, () -> {}).getLast();
+                    if (Record.appel(corrige).isPresent()) {
+                        message = corrige;
+                    }
                 }
                 pendantLeTour = false;
                 var appel = Record.appel(message);
@@ -430,9 +441,19 @@ class SessionController {
         if (e instanceof UnauthorizedException) {
             return "Clé Anthropic invalide : vérifier productdesigner.anthropic.api-key dans ~/.productdesigner/application.yml.";
         }
+        if (e instanceof NotFoundException n && String.valueOf(n.getMessage()).contains("does not exist")) {
+            return "Modèle indisponible pour ce compte ou cette région : régler productdesigner.anthropic.model"
+                    + " (sur Bedrock, vérifier l'accès au modèle dans la console). " + n.getMessage();
+        }
         if (e instanceof PermissionDeniedException) {
             return "Accès refusé : sur Bedrock, vérifier l'accès au modèle dans la console et la permission"
                     + " bedrock-mantle:CreateInference. " + e.getMessage();
+        }
+        for (Throwable c = e; c != null; c = c.getCause()) {
+            if (c instanceof java.net.UnknownHostException && String.valueOf(c.getMessage()).startsWith("bedrock-mantle.")) {
+                return "Endpoint Bedrock introuvable (" + c.getMessage() + ") : cette région n'a pas Claude in Amazon Bedrock ;"
+                        + " régler productdesigner.bedrock.region sur une région qui l'a (ex. eu-west-1, eu-central-1, us-east-1).";
+            }
         }
         if (e instanceof SdkClientException) {
             return "Identifiants AWS indisponibles ou expirés (relancer aws sso login ?) : " + e.getMessage();

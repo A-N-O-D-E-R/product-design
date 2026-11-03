@@ -53,10 +53,13 @@ class SpecController {
     private final Anthropic anthropic;
     private final MapController map;
     private final DecisionController decisions;
+    private final Consommation consommation;
     private final String prompt;
 
-    SpecController(JdbcClient jdbc, Anthropic anthropic, MapController map, DecisionController decisions) throws IOException {
+    SpecController(JdbcClient jdbc, Anthropic anthropic, MapController map, DecisionController decisions, Consommation consommation)
+            throws IOException {
         this.jdbc = jdbc;
+        this.consommation = consommation;
         this.anthropic = anthropic;
         this.map = map;
         this.decisions = decisions;
@@ -105,6 +108,7 @@ class SpecController {
                         }
                     }
                 }
+                consommation.enregistrer(projetId, "spec", anthropic.model(), accumulator.message().usage());
                 String texte = accumulator.message().content().stream().flatMap(b -> b.text().stream()).map(t -> t.text())
                         .reduce("", String::concat);
                 String contenu = normaliser(texte);

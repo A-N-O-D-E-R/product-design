@@ -29,7 +29,7 @@ export type Session = {
   progression: string | null
 }
 export type Artefact = { id: number; type: 'research_md' | 'prototype_html'; contenu: string; createdAt: string }
-export type QuestionRound = { id: string; titre: string; corps: string; recommandation: string }
+export type QuestionRound = { id: string; titre: string; corps: string; recommandation?: string }
 export type Round = { questions: QuestionRound[] }
 export type Affichage = { id: number; role: 'user' | 'assistant'; texte: string; round?: Round | null; incomplet?: boolean }
 

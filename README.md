@@ -54,6 +54,10 @@ productdesigner:
 
 Sans profil ni région, la chaîne AWS standard s'applique (variables `AWS_*`, `~/.aws/config`, rôle d'instance). Les appels passent par Claude in Amazon Bedrock (endpoint `bedrock-mantle`, signature SigV4).
 
+Constaté au premier test réel (novembre 2026) :
+- toutes les régions listées par la documentation n'ont pas l'endpoint `bedrock-mantle` : `eu-west-3` (Paris) n'en a pas, `eu-west-1` et `eu-central-1` oui. L'app le signale (« Endpoint Bedrock introuvable ») ;
+- l'accès aux modèles dépend du compte et de la région : Opus 5.5 et Sonnet 5.5 peuvent être absents alors qu'Opus 5 est ouvert. L'app le signale (« Modèle indisponible »), il suffit de régler `productdesigner.anthropic.model`.
+
 Limites sur Bedrock :
 - **Pas de recherche web** (aucun outil serveur sur Bedrock) : une Question *research* ne peut pas être ouverte. La passer en *grilling*, ou utiliser le fournisseur `anthropic`.
 - **Coût estimé** : les tarifs Bedrock diffèrent de ceux de l'API Anthropic ; sans entrée `productdesigner.tarifs.anthropic.claude-opus-5-5`, le coût s'affiche « inconnu ».

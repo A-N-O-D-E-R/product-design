@@ -7,7 +7,7 @@ import type { Round } from '@/lib/api'
 /** Carte d'un round (D-15) : reco acceptée par défaut, réponse libre prioritaire, envoi groupé `Q1: …`. */
 export function RoundCard({ round, actif, onEnvoyer }: { round: Round; actif: boolean; onEnvoyer: (texte: string) => void }) {
   const [reponses, setReponses] = useState<Record<string, { accepte: boolean; texte: string }>>({})
-  const etat = (id: string) => reponses[id] ?? { accepte: true, texte: '' }
+  const etat = (id: string) => reponses[id] ?? { accepte: !!round.questions.find((q) => q.id === id)?.recommandation, texte: '' }
   const maj = (id: string, patch: Partial<{ accepte: boolean; texte: string }>) =>
     setReponses((r) => ({ ...r, [id]: { ...etat(id), ...patch } }))
 
@@ -16,7 +16,7 @@ export function RoundCard({ round, actif, onEnvoyer }: { round: Round; actif: bo
       round.questions
         .map((q) => {
           const { accepte, texte } = etat(q.id)
-          return `${q.id}: ${texte.trim() || (accepte ? q.recommandation : '(sans réponse)')}`
+          return `${q.id}: ${texte.trim() || (accepte && q.recommandation ? q.recommandation : '(sans réponse)')}`
         })
         .join('\n'),
     )
@@ -30,13 +30,15 @@ export function RoundCard({ round, actif, onEnvoyer }: { round: Round; actif: bo
             <b>{q.id}.</b> <b>{q.titre}</b>
           </p>
           <p className="whitespace-pre-wrap">{q.corps}</p>
-          <p className="rounded bg-amber-50 px-2 py-1 text-sm text-amber-950">Reco : {q.recommandation}</p>
+          {q.recommandation && <p className="rounded bg-amber-50 px-2 py-1 text-sm text-amber-950">Reco : {q.recommandation}</p>}
           {actif && (
             <>
-              <label className="flex items-center gap-2 text-sm">
-                <Checkbox checked={etat(q.id).accepte} onCheckedChange={(c) => maj(q.id, { accepte: c })} />
-                Accepter la reco
-              </label>
+              {q.recommandation && (
+                <label className="flex items-center gap-2 text-sm">
+                  <Checkbox checked={etat(q.id).accepte} onCheckedChange={(c) => maj(q.id, { accepte: c })} />
+                  Accepter la reco
+                </label>
+              )}
               <Textarea
                 aria-label={`Réponse à ${q.id}`}
                 placeholder="…ou ta réponse"

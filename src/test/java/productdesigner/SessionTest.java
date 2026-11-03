@@ -150,7 +150,7 @@ class SessionTest {
         assertThat(sse).contains("event:delta", "Bonjour, ", "voici Q1.", "event:record", "\"recommandation\":\"Les devs\"", "event:fin");
         assertThat(sse).doesNotContain("avertissement");
         assertThat(requetes).hasSize(1);
-        assertThat(requetes.get(0)).contains("\"name\":\"record\"", "\"strict\":true", "arbre de décisions",
+        assertThat(requetes.get(0)).contains("\"name\":\"record\"", "arbre de décisions",
                 "Champs utilisés par cette Méthode : round, decision", "\"cache_control\"", "Une idée");
         assertThat(requetes.get(0)).doesNotContain("Matt Pocock");
 
@@ -404,6 +404,8 @@ class SessionTest {
         assertThat(send("POST", p + "/specs", null)).contains("\"version\":2");
         assertThat(send("GET", p + "/specs", null)).contains("\"version\":2", "\"version\":1");
         assertThat(send("GET", "/api/specs/" + specId, null)).contains("\"version\":1", "- **E-1** Faire [D-1]");
+        // Les générations de Spec comptent dans la consommation du Projet (2 appels à 5 tokens de sortie).
+        assertThat(send("GET", "/api/projets/" + projetId + "/consommation", null)).contains("\"outputTokens\":10");
     }
 
     @Test
@@ -515,6 +517,38 @@ class SessionTest {
         reponses.add(stream("Voilà.", ROUND));
         assertThat(send("POST", "/api/sessions/" + id + "/reessayer", null)).contains("event:record");
         assertThat(send("GET", "/api/sessions/" + id, null)).contains("\"reessayable\":false");
+    }
+
+    @Test
+    void recordAvecAccentsIntactDansLeSse() throws Exception {
+        String id = nouvelleSession();
+        reponses.add(stream("Voilà.", """
+                {"round":{"questions":[{"id":"Q1","titre":"Ingrédients structurés ?","corps":"Négociable, à voir ; « garçon » — ça ira.","recommandation":"Oui : structurés"}]},
+                 "decisions":[{"texte":"Décidé : vérifié"}],"questions":[],"map":{"destination":"","brouillard":[],"hors_perimetre":[]},"prototype_html":""}"""));
+        String sse = send("POST", "/api/sessions/" + id + "/messages", "{\"texte\":\"Salut\"}");
+        assertThat(sse).contains("Ingrédients structurés ?", "Négociable, à voir ; « garçon » — ça ira.", "Décidé : vérifié");
+        assertThat(send("GET", "/api/sessions/" + id, null)).contains("Ingrédients structurés ?");
+
+        // Gros record (comme en réel : plusieurs milliers de caractères accentués).
+        String long_ = "Les ingrédients structurés réduisent la vérification à la caisse. ".repeat(80);
+        reponses.add(stream("Voilà.", "{\"round\":{\"questions\":[{\"id\":\"Q1\",\"titre\":\"Négociable ?\",\"corps\":\"" + long_
+                + "\",\"recommandation\":\"Oui : structurés\"}]},\"decisions\":[],\"questions\":[],\"map\":{\"destination\":\"\",\"brouillard\":[],\"hors_perimetre\":[]},\"prototype_html\":\"\"}"));
+        String gros = send("POST", "/api/sessions/" + id + "/messages", "{\"texte\":\"Q1: oui\"}");
+        assertThat(gros).contains("Négociable ?", "Oui : structurés", long_.strip()).doesNotContain("ingr\\n");
+    }
+
+    @Test
+    void recordIncompletRelanceUneFoisAvecLesErreurs() throws Exception {
+        String id = nouvelleSession();
+        reponses.add(stream("Voici le round.", """
+                {"round":{"questions":[{"id":"Q1","titre":"Cible","corps":"Pour qui ? Ma recommandation : les devs."}]},"decisions":[],"questions":[],"map":{}}"""));
+        reponses.add(stream("", ROUND));
+        String sse = send("POST", "/api/sessions/" + id + "/messages", "{\"texte\":\"Salut\"}");
+        assertThat(requetes).hasSize(2);
+        assertThat(requetes.get(1)).contains("ne respecte pas le schéma", "round.questions[1].recommandation vide ou absent",
+                "{\"tool_use_id\":\"toolu_1\",\"type\":\"tool_result\"");
+        assertThat(sse).contains("event:record", "\"recommandation\":\"Les devs\"").doesNotContain("avertissement");
+        assertThat(send("GET", "/api/sessions/" + id, null)).doesNotContain("ne respecte pas le schéma");
     }
 
     @Autowired

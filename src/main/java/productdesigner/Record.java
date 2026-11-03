@@ -11,7 +11,7 @@ import com.anthropic.models.messages.Tool;
 import com.anthropic.models.messages.ToolUseBlock;
 import com.fasterxml.jackson.databind.JsonNode;
 
-/** Tool `record` : sorties structurées d'un tour d'Interview, au schéma unique commun à toutes les Méthodes (D-16). */
+/** Tool `record` : sorties structurées d'un tour d'Interview, au schéma unique commun à toutes les Méthodes (D-16), non strict. */
 final class Record {
 
     static final String NOM = "record";
@@ -59,7 +59,8 @@ final class Record {
                     .required(List.of("round", "decisions", "questions", "map", "prototype_html"))
                     .putAdditionalProperty("additionalProperties", JsonValue.from(false))
                     .build())
-            .strict(true)
+            // Pas de strict : en décodage contraint, le modèle échappe les accents en \\u00XX et glisse parfois des
+            // \\n parasites à leur place (observé sur Bedrock / Opus 5). La lecture de l'input est tolérante (path()).
             .build();
 
     /** Consigne ajoutée au prompt de la Méthode, selon les champs déclarés dans son frontmatter. */
@@ -67,6 +68,47 @@ final class Record {
         return "\n\nÀ la fin de chaque réponse, appelle le tool record. Champs utilisés par cette Méthode : "
                 + String.join(", ", outputs) + ". Laisse les autres listes vides (map.destination et prototype_html : chaînes vides). L'interface affiche le round en carte "
                 + "à partir de record : ton texte se limite à l'introduction et aux commentaires, sans recopier les questions.";
+    }
+
+    /**
+     * Écarts au schéma (le tool n'est pas strict) dans les éléments présents : champs obligatoires absents ou vides.
+     * Une liste ou un objet de haut niveau absent vaut « rien à enregistrer ». Liste vide si l'input est exploitable.
+     */
+    static List<String> erreurs(JsonNode input) {
+        List<String> erreurs = new java.util.ArrayList<>();
+        int i = 0;
+        for (JsonNode q : input.path("round").path("questions")) {
+            i++;
+            for (String champ : List.of("id", "titre", "corps", "recommandation")) {
+                if (q.path(champ).asText("").isBlank()) {
+                    erreurs.add("round.questions[" + i + "]." + champ + " vide ou absent");
+                }
+            }
+        }
+        i = 0;
+        for (JsonNode d : input.path("decisions")) {
+            i++;
+            if (d.path("texte").asText("").isBlank()) {
+                erreurs.add("decisions[" + i + "].texte vide ou absent");
+            }
+        }
+        i = 0;
+        for (JsonNode q : input.path("questions")) {
+            i++;
+            if (q.path("titre").asText("").isBlank()) {
+                erreurs.add("questions[" + i + "].titre vide ou absent");
+            }
+            if (!List.of("grilling", "research", "prototype", "tache").contains(q.path("type").asText(""))) {
+                erreurs.add("questions[" + i + "].type invalide");
+            }
+        }
+        return erreurs;
+    }
+
+    static String relanceInvalide(List<String> erreurs) {
+        return "Ton appel à record ne respecte pas le schéma : " + String.join(" ; ", erreurs)
+                + ". Rappelle record avec un input complet (chaque question de round a son champ recommandation à part)."
+                + " Ne répète pas le texte.";
     }
 
     static Optional<ToolUseBlock> appel(Message message) {

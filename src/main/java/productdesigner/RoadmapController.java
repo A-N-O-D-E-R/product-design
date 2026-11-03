@@ -78,10 +78,13 @@ class RoadmapController {
     private final JdbcClient jdbc;
     private final Anthropic anthropic;
     private final TransactionTemplate transaction;
+    private final Consommation consommation;
     private final String prompt;
 
-    RoadmapController(JdbcClient jdbc, Anthropic anthropic, PlatformTransactionManager transactions) throws IOException {
+    RoadmapController(JdbcClient jdbc, Anthropic anthropic, PlatformTransactionManager transactions, Consommation consommation)
+            throws IOException {
         this.jdbc = jdbc;
+        this.consommation = consommation;
         this.anthropic = anthropic;
         this.transaction = new TransactionTemplate(transactions);
         this.prompt = new ClassPathResource("prompts/roadmap.md").getContentAsString(StandardCharsets.UTF_8)
@@ -124,6 +127,7 @@ class RoadmapController {
     SseEmitter generer(@PathVariable long specId) {
         String spec = jdbc.sql("SELECT contenu FROM spec WHERE id = ?").param(specId).query(String.class).optional()
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Spec introuvable."));
+        long projet = jdbc.sql("SELECT projet_id FROM spec WHERE id = ?").param(specId).query(Long.class).single();
         var client = anthropic.client();
         StructuredMessageCreateParams<RoadmapGeneree> params = MessageCreateParams.builder()
                 .model(anthropic.model())
@@ -153,6 +157,7 @@ class RoadmapController {
                         }
                     }
                 }
+                consommation.enregistrer(projet, "roadmap", anthropic.model(), accumulator.message().usage());
                 RoadmapGeneree roadmap = accumulator.message(RoadmapGeneree.class).content().stream()
                         .flatMap(b -> b.text().stream()).findFirst().orElseThrow().text();
                 // Appel depuis ce thread, hors proxy Spring : la transaction est explicite (tout ou rien).
@@ -188,7 +193,7 @@ class RoadmapController {
         int ordreJalon = 1, ordreTicket = 1;
         for (JalonGenere j : roadmap.jalons()) {
             long jalonId = jdbc.sql("INSERT INTO jalon (spec_id, ordre, titre) VALUES (?, ?, ?) RETURNING id")
-                    .params(specId, ordreJalon++, j.titre()).query(Long.class).single();
+                    .params(specId, ordreJalon++, sansNumero(j.titre())).query(Long.class).single();
             if (j.tickets().size() < 3 || j.tickets().size() > 10) {
                 avertissements.add("Jalon « " + j.titre() + " » : " + j.tickets().size() + " Tickets (attendu : 3 à 10).");
             }
@@ -207,7 +212,7 @@ class RoadmapController {
         for (JalonGenere j : roadmap.jalons()) {
             for (TicketGenere t : j.tickets()) {
                 for (String par : t.blockedBy()) {
-                    Long parId = parTitre.get(par);
+                    Long parId = parTitre.containsKey(par) ? parTitre.get(par) : proche(parTitre, par);
                     if (parId == null) {
                         avertissements.add("Ticket « " + t.titre() + " » : prérequis inconnu « " + par + " », ignoré.");
                     } else if (!parId.equals(parTitre.get(t.titre()))) {
@@ -223,6 +228,38 @@ class RoadmapController {
             avertissements.add("Exigences non couvertes : " + String.join(", ", oubliees) + ".");
         }
         return avertissements;
+    }
+
+    /** Le numéro est porté par l'ordre : « Jalon 1 — Carnet » devient « Carnet ». */
+    static String sansNumero(String titre) {
+        return titre.replaceFirst("^\\s*Jalon\\s*\\d+\\s*[—–:.\\-]*\\s*", "").strip();
+    }
+
+    /**
+     * Prérequis cité avec une petite faute (le modèle a écrit « fencés » pour « fermés ») : seul titre à 3 éditions
+     * près, insensible à la casse ; null s'il n'y en a pas, ou plusieurs.
+     */
+    static Long proche(Map<String, Long> parTitre, String cite) {
+        List<String> candidats = parTitre.keySet().stream().filter(t -> distance(t.toLowerCase(), cite.toLowerCase()) <= 3).toList();
+        return candidats.size() == 1 ? parTitre.get(candidats.getFirst()) : null;
+    }
+
+    static int distance(String a, String b) {
+        int[] precedente = new int[b.length() + 1], courante = new int[b.length() + 1];
+        for (int j = 0; j <= b.length(); j++) {
+            precedente[j] = j;
+        }
+        for (int i = 1; i <= a.length(); i++) {
+            courante[0] = i;
+            for (int j = 1; j <= b.length(); j++) {
+                courante[j] = Math.min(Math.min(courante[j - 1], precedente[j]) + 1,
+                        precedente[j - 1] + (a.charAt(i - 1) == b.charAt(j - 1) ? 0 : 1));
+            }
+            int[] t = precedente;
+            precedente = courante;
+            courante = t;
+        }
+        return precedente[b.length()];
     }
 
     /** Corps markdown du Ticket : comportement, puis critères d'acceptation en cases à cocher. */

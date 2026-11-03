@@ -25,6 +25,10 @@ import org.springframework.test.context.DynamicPropertySource;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class BedrockTest {
 
+    static final String ROUND_ACCENTS = """
+            {"round":{"questions":[{"id":"Q1","titre":"Ingrédients structurés ?","corps":"Négociable, à voir.","recommandation":"Oui : structurés"}]},
+             "decisions":[],"questions":[],"map":{"destination":"","brouillard":[],"hors_perimetre":[]},"prototype_html":""}""";
+
     static HttpServer fauxBedrock;
     static final List<String> requetes = new CopyOnWriteArrayList<>();
 
@@ -33,7 +37,7 @@ class BedrockTest {
         fauxBedrock = HttpServer.create(new InetSocketAddress("localhost", 0), 0);
         fauxBedrock.createContext("/", ex -> {
             requetes.add(ex.getRequestURI().getPath() + " " + new String(ex.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
-            byte[] b = SessionTest.stream("Bonjour depuis Bedrock.", SessionTest.ROUND).getBytes(StandardCharsets.UTF_8);
+            byte[] b = SessionTest.stream("Bonjour depuis Bedrock.", ROUND_ACCENTS).getBytes(StandardCharsets.UTF_8);
             ex.getResponseHeaders().add("Content-Type", "text/event-stream");
             ex.sendResponseHeaders(200, b.length);
             ex.getResponseBody().write(b);
@@ -70,7 +74,7 @@ class BedrockTest {
         String projet = send("POST", "/api/projets", "{\"nom\":\"B\"}").replaceAll(".*\"id\":(\\d+),.*", "$1");
         String session = send("POST", "/api/projets/" + projet + "/sessions", "{\"methode\":\"grilling\"}").replaceAll(".*?\"id\":(\\d+),.*", "$1");
 
-        assertThat(send("POST", "/api/sessions/" + session + "/messages", "{\"texte\":\"Salut\"}")).contains("uis Bedrock.", "event:record");
+        assertThat(send("POST", "/api/sessions/" + session + "/messages", "{\"texte\":\"Salut\"}")).contains("uis Bedrock.", "event:record", "Ingrédients structurés ?", "Négociable, à voir.");
         assertThat(requetes.getLast()).startsWith("/anthropic/v1/messages ").contains("\"model\":\"anthropic.claude-opus-5-5\"", "\"name\":\"record\"",
                 "ne crée pas de Question de type research");
     }
