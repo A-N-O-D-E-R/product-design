@@ -17,7 +17,8 @@ class StatusController {
     @GetMapping("/api/status")
     Map<String, Object> status() {
         return anthropic.configured()
-                ? Map.of("anthropic", true)
+                ? Map.of("anthropic", true, "fournisseur", anthropic.fournisseur(), "model", anthropic.model(),
+                        "rechercheWeb", anthropic.rechercheWeb())
                 : Map.of("anthropic", false, "message", Anthropic.CLE_ABSENTE);
     }
 }

@@ -4,7 +4,7 @@ import { Projets } from '@/pages/Projets'
 import { ProjetPage } from '@/pages/ProjetPage'
 import { SessionPage } from '@/pages/SessionPage'
 
-type Status = { anthropic: boolean; message?: string }
+type Status = { anthropic: boolean; message?: string; fournisseur?: string; model?: string }
 
 function Layout() {
   const [status, setStatus] = useState<Status>()
@@ -13,7 +13,14 @@ function Layout() {
   }, [])
   return (
     <div className="min-h-screen">
-      <header className="border-b px-4 py-2 font-semibold">productDesigner</header>
+      <header className="flex items-baseline gap-3 border-b px-4 py-2">
+        <span className="font-semibold">productDesigner</span>
+        {status?.model && (
+          <span className="text-xs text-muted-foreground">
+            {status.fournisseur === 'bedrock' ? 'Amazon Bedrock' : 'API Anthropic'} · {status.model}
+          </span>
+        )}
+      </header>
       {status && !status.anthropic && (
         <div role="alert" className="border-b bg-amber-50 px-4 py-2 text-sm text-amber-900">
           {status.message}

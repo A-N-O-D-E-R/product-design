@@ -17,7 +17,9 @@
 
   <properties>
     <java.version>25</java.version>
-    <anthropic.version>3.3.0</anthropic.version>
+    <anthropic.version>3.4.0</anthropic.version>
+    <!-- Même version que celle tirée par anthropic-java-bedrock. -->
+    <aws.sdk.version>2.46.8</aws.sdk.version>
   </properties>
 
   <dependencies>
@@ -41,6 +43,28 @@
       <groupId>com.anthropic</groupId>
       <artifactId>anthropic-java</artifactId>
       <version>${anthropic.version}</version>
+    </dependency>
+    <!-- Claude in Amazon Bedrock (Mantle) : signature SigV4 et identifiants AWS. -->
+    <dependency>
+      <groupId>com.anthropic</groupId>
+      <artifactId>anthropic-java-bedrock</artifactId>
+      <version>${anthropic.version}</version>
+    </dependency>
+    <!-- Profils AWS SSO (aws sso login) : modules et client HTTP requis par la chaîne d'identifiants. -->
+    <dependency>
+      <groupId>software.amazon.awssdk</groupId>
+      <artifactId>sso</artifactId>
+      <version>${aws.sdk.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>software.amazon.awssdk</groupId>
+      <artifactId>ssooidc</artifactId>
+      <version>${aws.sdk.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>software.amazon.awssdk</groupId>
+      <artifactId>url-connection-client</artifactId>
+      <version>${aws.sdk.version}</version>
     </dependency>
 
     <dependency>

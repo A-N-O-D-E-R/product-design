@@ -13,6 +13,7 @@ import com.anthropic.client.AnthropicClient;
 import com.anthropic.core.ObjectMappers;
 import com.anthropic.core.http.StreamResponse;
 import com.anthropic.errors.BadRequestException;
+import com.anthropic.errors.PermissionDeniedException;
 import com.anthropic.errors.UnauthorizedException;
 import com.anthropic.helpers.MessageAccumulator;
 import com.anthropic.models.messages.CacheControlEphemeral;
@@ -47,6 +48,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import software.amazon.awssdk.core.exception.SdkClientException;
 
 @RestController
 class SessionController {
@@ -257,6 +259,9 @@ class SessionController {
         }
         String methode = methode(type);
         methodes.get(methode);
+        if (methode.equals("research") && !anthropic.rechercheWeb()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, Anthropic.SANS_RECHERCHE_WEB);
+        }
         jdbc.sql("UPDATE question SET statut = 'claimed' WHERE id = ?").param(questionId).update();
         long id = jdbc.sql("INSERT INTO session (projet_id, methode, question_id) VALUES (?, ?, ?) RETURNING id")
                 .params(projetId, methode, questionId).query(Long.class).single();
@@ -425,6 +430,13 @@ class SessionController {
         if (e instanceof UnauthorizedException) {
             return "Clé Anthropic invalide : vérifier productdesigner.anthropic.api-key dans ~/.productdesigner/application.yml.";
         }
+        if (e instanceof PermissionDeniedException) {
+            return "Accès refusé : sur Bedrock, vérifier l'accès au modèle dans la console et la permission"
+                    + " bedrock-mantle:CreateInference. " + e.getMessage();
+        }
+        if (e instanceof SdkClientException) {
+            return "Identifiants AWS indisponibles ou expirés (relancer aws sso login ?) : " + e.getMessage();
+        }
         if (e instanceof BadRequestException b) {
             return b.getMessage().contains("too long")
                     ? "Requête trop longue pour le contexte du modèle : continue dans une nouvelle Session."
@@ -514,7 +526,7 @@ class SessionController {
                 // Cache automatique : le préfixe d'historique est réutilisé d'un tour à l'autre.
                 .addTool(Record.TOOL)
                 .cacheControl(cache);
-        if (session.methode().equals("research")) {
+        if (session.methode().equals("research") && anthropic.rechercheWeb()) {
             builder.addTool(WebSearchTool20260209.builder().maxUses(RECHERCHES_MAX).build())
                     .outputConfig(OutputConfig.builder().effort(OutputConfig.Effort.HIGH).build());
         }
@@ -532,6 +544,10 @@ class SessionController {
                 .query(String.class).single();
         if (!destination.isBlank()) {
             sb.append("\n\nDestination de la Map : ").append(destination);
+        }
+        if (!anthropic.rechercheWeb()) {
+            sb.append("\n\nAucune recherche web n'est disponible dans cette installation : ne crée pas de Question de type"
+                    + " research ; formule les faits à vérifier comme des Questions grilling ou tache.");
         }
         if (session.continuedFrom() != null) {
             sb.append("\n\nCette Session prend la suite d'une Session précédente arrivée en limite de contexte ; "

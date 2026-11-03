@@ -20,7 +20,8 @@ Application locale, mono-utilisateur, sans authentification. Vocabulaire du doma
 
 - **Java 25** (ex. `sdk install java 25.0.2-oracle`) et Maven 3.9+.
 - Node n'est pas requis : le build Maven installe sa propre copie (v20.20) pour construire le front.
-- Une clé API Anthropic ; pour l'export, un site Jira Cloud, un email et un [token API](https://id.atlassian.com/manage-profile/security/api-tokens) (non scopé).
+- Un accès à Claude : une clé API Anthropic, **ou** un compte AWS avec Claude in Amazon Bedrock (accès au modèle activé, permission `bedrock-mantle:CreateInference`).
+- Pour l'export, un site Jira Cloud, un email et un [token API](https://id.atlassian.com/manage-profile/security/api-tokens) (non scopé).
 
 ## Configuration
 
@@ -37,7 +38,27 @@ productdesigner:
     token: <token API Atlassian>
 ```
 
-Sans clé Anthropic, l'app démarre et affiche un bandeau ; sans config Jira, l'export l'indique. Autres réglages (valeurs par défaut dans [`src/main/resources/application.yml`](src/main/resources/application.yml), surchargeables au même endroit) :
+### Amazon Bedrock
+
+À la place de la clé Anthropic :
+
+```yaml
+productdesigner:
+  anthropic:
+    fournisseur: bedrock
+    # model: anthropic.claude-opus-5-5   # défaut sur Bedrock (préfixe « anthropic. »)
+  bedrock:
+    profil: mon-profil-aws     # facultatif ; profil SSO compris (aws sso login --profile mon-profil-aws)
+    # region: eu-west-3        # facultatif ; sinon celle du profil, ou AWS_REGION
+```
+
+Sans profil ni région, la chaîne AWS standard s'applique (variables `AWS_*`, `~/.aws/config`, rôle d'instance). Les appels passent par Claude in Amazon Bedrock (endpoint `bedrock-mantle`, signature SigV4).
+
+Limites sur Bedrock :
+- **Pas de recherche web** (aucun outil serveur sur Bedrock) : une Question *research* ne peut pas être ouverte. La passer en *grilling*, ou utiliser le fournisseur `anthropic`.
+- **Coût estimé** : les tarifs Bedrock diffèrent de ceux de l'API Anthropic ; sans entrée `productdesigner.tarifs.anthropic.claude-opus-5-5`, le coût s'affiche « inconnu ».
+
+Sans accès Claude configuré, l'app démarre et affiche un bandeau ; sans config Jira, l'export l'indique. Autres réglages (valeurs par défaut dans [`src/main/resources/application.yml`](src/main/resources/application.yml), surchargeables au même endroit) :
 
 | Propriété | Défaut | Rôle |
 |---|---|---|
@@ -69,6 +90,7 @@ Spring Boot 4.1, un seul jar, virtual threads
    ├─ methodes/*.md        prompts des Méthodes (frontmatter : champs de record utilisés)
    ├─ prompts/*.md         prompts de la Spec et de la Roadmap
    ├─ SDK Java Anthropic   streaming, tool `record` strict, web search, prompt caching
+   │                       (API Anthropic, ou Amazon Bedrock via BedrockMantleBackend)
    ├─ JiraClient           API REST v3 (Basic, bulk, ADF, Retry-After)
    └─ JdbcClient + Flyway ─▶ SQLite (une connexion)
 ```
