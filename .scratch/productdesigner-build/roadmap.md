@@ -38,3 +38,13 @@ Source : [`../productdesigner-mvp/spec.md`](../productdesigner-mvp/spec.md) v2.
 - [17 · Export Jira : Epics et Stories](issues/17-export-jira.md) (bloqué par 16)
 - [18 · Export Jira : liens et erreurs](issues/18-export-erreurs-liens.md) (bloqué par 17)
 - [19 · Ré-export Jira](issues/19-reexport-jira.md) (bloqué par 17)
+
+## Après la Roadmap
+
+- [23 · Suites de la revue critique](issues/23-suites-revue.md)
+- [24 · Test réel de bout en bout](issues/24-test-reel.md)
+
+Ajouts hors Spec, décidés en cours de route :
+- [ADR 0001 — Tool `record` non strict, validé côté serveur](../../docs/adr/0001-record-non-strict.md)
+- [ADR 0002 — Claude in Amazon Bedrock comme second fournisseur](../../docs/adr/0002-fournisseur-bedrock.md)
+- [ADR 0003 — Spec publiée sur Confluence, token Atlassian scopé](../../docs/adr/0003-confluence-et-token-scope.md)

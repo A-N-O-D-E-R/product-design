@@ -2,6 +2,8 @@
 
 Version : 2 · 2026-11-01 · source : `map.md` + `issues/01..11`
 
+> **Amendements après réalisation** (2026-11-03), sans nouvelle version de cette Spec : [ADR 0001](../../docs/adr/0001-record-non-strict.md) (D-16 : `record` non strict), [ADR 0002](../../docs/adr/0002-fournisseur-bedrock.md) (fournisseur Bedrock, sans research), [ADR 0003](../../docs/adr/0003-confluence-et-token-scope.md) (Spec sur Confluence, token scopé).
+
 ## 1. Problème et Destination
 
 Quand on a une idée de projet, elle reste floue : on mélange les décisions prises, les questions ouvertes et les intuitions, et on passe au code (ou au Jira) trop tôt. productDesigner est un logiciel d'Interview guidée par LLM. Il fait préciser sa pensée à l'utilisateur, une Question à la fois, puis produit une Spec, une Roadmap et des Tickets qu'on peut exporter vers Jira.

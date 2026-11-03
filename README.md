@@ -135,7 +135,26 @@ Spring Boot 4.1, un seul jar, virtual threads
 | `frontend/src/` | Pages et composants du front |
 | `.scratch/productdesigner-mvp/` | Map de conception, Questions résolues, Spec du MVP, prototype de l'écran de Session |
 | `.scratch/productdesigner-build/` | Roadmap et Tickets d'implémentation, avec notes de réalisation |
+| `docs/adr/` | Décisions d'architecture prises après la Spec du MVP |
 | `docs/agents/` | Conventions du tracker local et du domaine |
+
+## État de validation
+
+MVP terminé : 22 Tickets de la Roadmap, plus les suites de revue et du test réel. 66 tests automatisés, sans appel réseau (faux serveurs Anthropic, Bedrock, Jira et Confluence).
+
+Vérifié en réel le 2026-11-03 (détail : [`.scratch/productdesigner-build/issues/24-test-reel.md`](.scratch/productdesigner-build/issues/24-test-reel.md)) :
+
+| Parcours | Réel | Avec |
+|---|---|---|
+| Tracé de la Map, Session grilling, Décisions, clôture | oui | Amazon Bedrock, Opus 5 |
+| Spec (2 versions) et Roadmap | oui | Amazon Bedrock, Opus 5 |
+| Export et ré-export Jira | oui | Jira Cloud, token scopé |
+| Publication Confluence (2 versions) | oui | Confluence Cloud, token scopé |
+| Research (recherche web) | **non** | demande une clé API Anthropic (indisponible sur Bedrock) |
+| Prototype | non | testé contre un faux serveur ; isolation de l'iframe vérifiée dans Chromium |
+| API Anthropic directe | non | pas de clé disponible |
+
+Décisions prises après la Spec du MVP : [`docs/adr/`](docs/adr/).
 
 ## Licences
 
