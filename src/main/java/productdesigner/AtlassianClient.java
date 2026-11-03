@@ -34,27 +34,38 @@ class AtlassianClient {
     private final String email;
     private final String token;
     private final long baseMs;
+    private final String cloudId;
+    private final String passerelle;
 
     AtlassianClient(@Value("${productdesigner.jira.site:}") String site,
                @Value("${productdesigner.jira.email:}") String email,
                @Value("${productdesigner.jira.token:}") String token,
-               @Value("${productdesigner.jira.backoff-ms:2000}") long baseMs) {
+               @Value("${productdesigner.jira.backoff-ms:2000}") long baseMs,
+               @Value("${productdesigner.jira.cloud-id:}") String cloudId,
+               @Value("${productdesigner.jira.passerelle:https://api.atlassian.com}") String passerelle) {
         this.site = site.replaceAll("/+$", "");
         this.email = email;
         this.token = token;
         this.baseMs = baseMs;
+        this.cloudId = cloudId.strip();
+        this.passerelle = passerelle.replaceAll("/+$", "");
     }
 
     boolean configure() {
         return !site.isBlank() && !email.isBlank() && !token.isBlank();
     }
 
-    private RestClient client() {
+    /**
+     * Token sans scope : appels directs au site. Token scopé (cloud-id renseigné) : passerelle Atlassian
+     * `api.atlassian.com/ex/{jira|confluence}/{cloudId}`, seule voie qui l'accepte.
+     */
+    private RestClient client(String produit) {
         if (!configure()) {
             throw new ConfigManquanteException(CONFIG_ABSENTE);
         }
         String basic = Base64.getEncoder().encodeToString((email + ":" + token).getBytes(StandardCharsets.UTF_8));
-        return RestClient.builder().baseUrl(site)
+        String base = cloudId.isBlank() ? site : passerelle + "/ex/" + produit + "/" + cloudId;
+        return RestClient.builder().baseUrl(base)
                 .defaultHeader("Authorization", "Basic " + basic)
                 .defaultHeader("Accept", MediaType.APPLICATION_JSON_VALUE)
                 .build();
@@ -67,7 +78,7 @@ class AtlassianClient {
         int debut = 0;
         while (true) {
             int startAt = debut;
-            Map<String, Object> page = appel(() -> client().get()
+            Map<String, Object> page = appel(() -> client("jira").get()
                     .uri("/rest/api/3/issue/createmeta/{projet}/issuetypes?startAt={debut}&maxResults=50", projet, startAt)
                     .retrieve().body(Map.class));
             List<Map<String, Object>> types = (List<Map<String, Object>>) page.getOrDefault("issueTypes", page.getOrDefault("values", List.of()));
@@ -97,7 +108,7 @@ class AtlassianClient {
 
     @SuppressWarnings("unchecked")
     String creer(Map<String, Object> champs) {
-        Map<String, Object> r = appel(() -> client().post().uri("/rest/api/3/issue")
+        Map<String, Object> r = appel(() -> client("jira").post().uri("/rest/api/3/issue")
                 .contentType(MediaType.APPLICATION_JSON).body(Map.of("fields", champs)).retrieve().body(Map.class));
         return String.valueOf(r.get("key"));
     }
@@ -108,7 +119,7 @@ class AtlassianClient {
         List<Map<String, Object>> elements = champs.stream().map(c -> Map.<String, Object>of("fields", c)).toList();
         Map<String, Object> r;
         try {
-            r = appel(() -> client().post().uri("/rest/api/3/issue/bulk").contentType(MediaType.APPLICATION_JSON)
+            r = appel(() -> client("jira").post().uri("/rest/api/3/issue/bulk").contentType(MediaType.APPLICATION_JSON)
                     .body(Map.of("issueUpdates", elements)).retrieve().body(Map.class));
         } catch (HttpClientErrorException e) {
             if (e.getStatusCode().value() != 400) {
@@ -140,7 +151,7 @@ class AtlassianClient {
         // Guillemets et antislashs retirés de la phrase recherchée ; l'égalité exacte est vérifiée ci-dessous.
         String phrase = titre.replaceAll("[\"\\\\]", " ");
         String jql = "project = \"" + projet + "\" AND issuetype = " + type + " AND summary ~ \"\\\"" + phrase + "\\\"\" ORDER BY created DESC";
-        Map<String, Object> r = appel(() -> client().get()
+        Map<String, Object> r = appel(() -> client("jira").get()
                 .uri(u -> u.path("/rest/api/3/search/jql").queryParam("jql", "{jql}").queryParam("fields", "summary,parent")
                         .queryParam("maxResults", 50).build(jql))
                 .retrieve().body(Map.class));
@@ -161,7 +172,7 @@ class AtlassianClient {
     }
 
     void modifier(String cle, Map<String, Object> champs) {
-        appel(() -> client().put().uri("/rest/api/3/issue/{cle}", cle).contentType(MediaType.APPLICATION_JSON)
+        appel(() -> client("jira").put().uri("/rest/api/3/issue/{cle}", cle).contentType(MediaType.APPLICATION_JSON)
                 .body(Map.of("fields", champs)).retrieve().toBodilessEntity());
     }
 
@@ -172,7 +183,7 @@ class AtlassianClient {
     /** Id de l'espace d'après sa clé (`GET /wiki/api/v2/spaces?keys=`). */
     @SuppressWarnings("unchecked")
     String espace(String cle) {
-        Map<String, Object> r = appel(() -> client().get()
+        Map<String, Object> r = appel(() -> client("confluence").get()
                 .uri(u -> u.path("/wiki/api/v2/spaces").queryParam("keys", "{cle}").build(cle)).retrieve().body(Map.class));
         List<Map<String, Object>> espaces = (List<Map<String, Object>>) r.getOrDefault("results", List.of());
         if (espaces.isEmpty()) {
@@ -185,7 +196,7 @@ class AtlassianClient {
     @SuppressWarnings("unchecked")
     java.util.Optional<Page> page(String id) {
         try {
-            Map<String, Object> r = appel(() -> client().get().uri("/wiki/api/v2/pages/{id}", id).retrieve().body(Map.class));
+            Map<String, Object> r = appel(() -> client("confluence").get().uri("/wiki/api/v2/pages/{id}", id).retrieve().body(Map.class));
             return java.util.Optional.of(versPage(r));
         } catch (HttpClientErrorException.NotFound e) {
             return java.util.Optional.empty();
@@ -194,14 +205,14 @@ class AtlassianClient {
 
     /** Corps en ADF (`atlas_doc_format`), comme les descriptions Jira. */
     Page creerPage(String espaceId, String titre, Map<String, Object> adf) {
-        return versPage(appel(() -> client().post().uri("/wiki/api/v2/pages").contentType(MediaType.APPLICATION_JSON)
+        return versPage(appel(() -> client("confluence").post().uri("/wiki/api/v2/pages").contentType(MediaType.APPLICATION_JSON)
                 .body(Map.of("spaceId", espaceId, "status", "current", "title", titre, "body", corps(adf)))
                 .retrieve().body(Map.class)));
     }
 
     /** Nouvelle version de la page : numéro courant + 1, avec un message de version. */
     Page modifierPage(String id, int version, String titre, Map<String, Object> adf, String message) {
-        return versPage(appel(() -> client().put().uri("/wiki/api/v2/pages/{id}", id).contentType(MediaType.APPLICATION_JSON)
+        return versPage(appel(() -> client("confluence").put().uri("/wiki/api/v2/pages/{id}", id).contentType(MediaType.APPLICATION_JSON)
                 .body(Map.of("id", id, "status", "current", "title", titre, "body", corps(adf),
                         "version", Map.of("number", version + 1, "message", message)))
                 .retrieve().body(Map.class)));
@@ -226,7 +237,7 @@ class AtlassianClient {
 
     /** Lien « Blocks » : `bloquant` blocks `bloque` (outwardIssue = celui qui bloque). */
     void lierBlocage(String bloquant, String bloque) {
-        appel(() -> client().post().uri("/rest/api/3/issueLink").contentType(MediaType.APPLICATION_JSON)
+        appel(() -> client("jira").post().uri("/rest/api/3/issueLink").contentType(MediaType.APPLICATION_JSON)
                 .body(Map.of("type", Map.of("name", "Blocks"), "outwardIssue", Map.of("key", bloquant), "inwardIssue", Map.of("key", bloque)))
                 .retrieve().toBodilessEntity());
     }

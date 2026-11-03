@@ -39,6 +39,28 @@ productdesigner:
     token: <token API Atlassian>
 ```
 
+### Jira et Confluence
+
+Même compte Atlassian pour les deux. Le token API conseillé est **scopé** (« Create API token with scopes ») ; il passe par la passerelle `api.atlassian.com`, qui demande le `cloudId` du site (`https://<site>.atlassian.net/_edge/tenant_info`) :
+
+```yaml
+productdesigner:
+  jira:
+    site: https://<site>.atlassian.net
+    email: moi@exemple.fr
+    token: <token API scopé>
+    cloud-id: <cloudId>          # absent : token sans scope, appels directs au site
+```
+
+Scopes minimaux :
+
+| Produit | Scopes |
+|---|---|
+| Jira | `read:jira-work`, `write:jira-work` |
+| Confluence | `read:space:confluence`, `read:page:confluence`, `write:page:confluence` |
+
+Un token expire au bout d'un an au plus ; l'app affiche alors « Token Jira expiré ou invalide ».
+
 ### Amazon Bedrock
 
 À la place de la clé Anthropic :
