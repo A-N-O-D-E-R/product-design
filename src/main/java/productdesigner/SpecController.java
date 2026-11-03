@@ -45,7 +45,8 @@ class SpecController {
             "6. Décisions structurantes",
             "7. Questions ouvertes / Brouillard restant");
 
-    record Spec(long id, int version, String contenu, String createdAt) {}
+    /** confluenceVersion : version de la page Confluence publiée depuis cette Spec (null sinon). */
+    record Spec(long id, int version, String contenu, String createdAt, Integer confluenceVersion, String confluenceEspace) {}
 
     record Version(long id, int version, String createdAt) {}
 
@@ -74,7 +75,9 @@ class SpecController {
 
     @GetMapping("/api/specs/{id}")
     Spec spec(@PathVariable long id) {
-        return jdbc.sql("SELECT id, version, contenu, created_at FROM spec WHERE id = ?").param(id).query(Spec.class).optional()
+        return jdbc.sql("""
+                        SELECT s.id, s.version, s.contenu, s.created_at, s.confluence_version, p.confluence_espace
+                        FROM spec s JOIN projet p ON p.id = s.projet_id WHERE s.id = ?""").param(id).query(Spec.class).optional()
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Spec introuvable."));
     }
 

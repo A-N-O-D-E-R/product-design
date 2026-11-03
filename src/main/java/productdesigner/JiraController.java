@@ -36,10 +36,10 @@ class JiraController {
     private record Lien(long ticketId, long parId, String cle, String parCle) {}
 
     private final JdbcClient jdbc;
-    private final JiraClient jira;
+    private final AtlassianClient jira;
     private final RoadmapController roadmaps;
 
-    JiraController(JdbcClient jdbc, JiraClient jira, RoadmapController roadmaps) {
+    JiraController(JdbcClient jdbc, AtlassianClient jira, RoadmapController roadmaps) {
         this.jdbc = jdbc;
         this.jira = jira;
         this.roadmaps = roadmaps;
@@ -47,7 +47,7 @@ class JiraController {
 
     @GetMapping("/api/jira/status")
     Map<String, Object> status() {
-        return jira.configure() ? Map.of("configure", true) : Map.of("configure", false, "message", JiraClient.CONFIG_ABSENTE);
+        return jira.configure() ? Map.of("configure", true) : Map.of("configure", false, "message", AtlassianClient.CONFIG_ABSENTE);
     }
 
     @PostMapping("/api/specs/{specId}/export-jira")
@@ -61,7 +61,7 @@ class JiraController {
         if (projet.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Clé du projet Jira obligatoire.");
         }
-        JiraClient.Types types = jira.types(projet);
+        AtlassianClient.Types types = jira.types(projet);
         Set<Long> jalonsIncertains = Set.copyOf(jdbc.sql("SELECT id FROM jalon WHERE spec_id = ? AND jira_incertain = 1")
                 .param(specId).query(Long.class).list());
         Set<Long> ticketsIncertains = Set.copyOf(jdbc.sql(
@@ -90,7 +90,7 @@ class JiraController {
                 } catch (ResponseStatusException e) {
                     throw e;
                 } catch (RuntimeException e) {
-                    jdbc.sql("UPDATE jalon SET jira_incertain = ? WHERE id = ?").params(JiraClient.incertain(e), j.id()).update();
+                    jdbc.sql("UPDATE jalon SET jira_incertain = ? WHERE id = ?").params(AtlassianClient.incertain(e), j.id()).update();
                     echecs.add(new Echec("Jalon « " + j.titre() + " »", e.getMessage()));
                     continue;
                 }
@@ -135,7 +135,7 @@ class JiraController {
         int stories = 0;
         for (int debut = 0; debut < champs.size(); debut += LOT) {
             int fin = Math.min(debut + LOT, champs.size());
-            JiraClient.Bulk bulk;
+            AtlassianClient.Bulk bulk;
             try {
                 bulk = jira.creerEnMasse(champs.subList(debut, fin));
             } catch (ResponseStatusException e) {
@@ -143,7 +143,7 @@ class JiraController {
             } catch (RuntimeException e) {
                 // Lot entier en échec : chaque Ticket est signalé ; marqué incertain si Jira a pu le créer quand même.
                 for (RoadmapController.Ticket t : aCreer.subList(debut, fin)) {
-                    jdbc.sql("UPDATE ticket SET jira_incertain = ? WHERE id = ?").params(JiraClient.incertain(e), t.id()).update();
+                    jdbc.sql("UPDATE ticket SET jira_incertain = ? WHERE id = ?").params(AtlassianClient.incertain(e), t.id()).update();
                     echecs.add(new Echec(t.titre(), e.getMessage()));
                 }
                 continue;

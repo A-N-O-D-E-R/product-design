@@ -15,11 +15,11 @@ import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.server.ResponseStatusException;
 
-/** API REST Jira Cloud v3 (D-10, D-11) : auth Basic email + token API non scopé. */
+/** API REST Atlassian Cloud, Jira v3 et Confluence v2 (D-10, D-11) : même site, auth Basic email + token API non scopé. */
 @Component
-class JiraClient {
+class AtlassianClient {
 
-    static final String CONFIG_ABSENTE = "Config Jira absente : ajouter productdesigner.jira.site, .email et .token"
+    static final String CONFIG_ABSENTE = "Config Atlassian absente (Jira et Confluence) : ajouter productdesigner.jira.site, .email et .token"
             + " dans ~/.productdesigner/application.yml, puis redémarrer.";
 
     record Types(String epic, String story) {}
@@ -35,7 +35,7 @@ class JiraClient {
     private final String token;
     private final long baseMs;
 
-    JiraClient(@Value("${productdesigner.jira.site:}") String site,
+    AtlassianClient(@Value("${productdesigner.jira.site:}") String site,
                @Value("${productdesigner.jira.email:}") String email,
                @Value("${productdesigner.jira.token:}") String token,
                @Value("${productdesigner.jira.backoff-ms:2000}") long baseMs) {
@@ -163,6 +163,65 @@ class JiraClient {
     void modifier(String cle, Map<String, Object> champs) {
         appel(() -> client().put().uri("/rest/api/3/issue/{cle}", cle).contentType(MediaType.APPLICATION_JSON)
                 .body(Map.of("fields", champs)).retrieve().toBodilessEntity());
+    }
+
+    // --- Confluence Cloud, API v2 ---
+
+    record Page(String id, int version, String url) {}
+
+    /** Id de l'espace d'après sa clé (`GET /wiki/api/v2/spaces?keys=`). */
+    @SuppressWarnings("unchecked")
+    String espace(String cle) {
+        Map<String, Object> r = appel(() -> client().get()
+                .uri(u -> u.path("/wiki/api/v2/spaces").queryParam("keys", "{cle}").build(cle)).retrieve().body(Map.class));
+        List<Map<String, Object>> espaces = (List<Map<String, Object>>) r.getOrDefault("results", List.of());
+        if (espaces.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Espace Confluence " + cle + " introuvable (ou pas d'accès).");
+        }
+        return String.valueOf(espaces.getFirst().get("id"));
+    }
+
+    /** Page courante, ou vide si elle a été supprimée de Confluence. */
+    @SuppressWarnings("unchecked")
+    java.util.Optional<Page> page(String id) {
+        try {
+            Map<String, Object> r = appel(() -> client().get().uri("/wiki/api/v2/pages/{id}", id).retrieve().body(Map.class));
+            return java.util.Optional.of(versPage(r));
+        } catch (HttpClientErrorException.NotFound e) {
+            return java.util.Optional.empty();
+        }
+    }
+
+    /** Corps en ADF (`atlas_doc_format`), comme les descriptions Jira. */
+    Page creerPage(String espaceId, String titre, Map<String, Object> adf) {
+        return versPage(appel(() -> client().post().uri("/wiki/api/v2/pages").contentType(MediaType.APPLICATION_JSON)
+                .body(Map.of("spaceId", espaceId, "status", "current", "title", titre, "body", corps(adf)))
+                .retrieve().body(Map.class)));
+    }
+
+    /** Nouvelle version de la page : numéro courant + 1, avec un message de version. */
+    Page modifierPage(String id, int version, String titre, Map<String, Object> adf, String message) {
+        return versPage(appel(() -> client().put().uri("/wiki/api/v2/pages/{id}", id).contentType(MediaType.APPLICATION_JSON)
+                .body(Map.of("id", id, "status", "current", "title", titre, "body", corps(adf),
+                        "version", Map.of("number", version + 1, "message", message)))
+                .retrieve().body(Map.class)));
+    }
+
+    private static Map<String, Object> corps(Map<String, Object> adf) {
+        try {
+            return Map.of("representation", "atlas_doc_format", "value", new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(adf));
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private Page versPage(Map<String, Object> r) {
+        Map<String, Object> version = (Map<String, Object>) r.getOrDefault("version", Map.of());
+        Map<String, Object> liens = (Map<String, Object>) r.getOrDefault("_links", Map.of());
+        Object base = liens.getOrDefault("base", site + "/wiki");
+        return new Page(String.valueOf(r.get("id")), ((Number) version.getOrDefault("number", 1)).intValue(),
+                base + String.valueOf(liens.getOrDefault("webui", "")));
     }
 
     /** Lien « Blocks » : `bloquant` blocks `bloque` (outwardIssue = celui qui bloque). */

@@ -274,7 +274,7 @@ class JiraTest {
 
     @Test
     void delaiRetryAfterPuisBackoff() {
-        JiraClient c = new JiraClient("http://x", "e", "t", 2000);
+        AtlassianClient c = new AtlassianClient("http://x", "e", "t", 2000);
         assertThat(c.delai("7", 1)).isEqualTo(7000);
         assertThat(c.delai(null, 1)).isBetween(1400L, 2600L);
         assertThat(c.delai(null, 3)).isBetween(5600L, 10400L);
@@ -313,7 +313,7 @@ class JiraTest {
 
     @Test
     void configAbsenteMessageExplicite() {
-        assertThatThrownBy(() -> new JiraClient("", "", "", 1).types("PD"))
-                .isInstanceOf(ConfigManquanteException.class).hasMessageContaining("Config Jira absente");
+        assertThatThrownBy(() -> new AtlassianClient("", "", "", 1).types("PD"))
+                .isInstanceOf(ConfigManquanteException.class).hasMessageContaining("Config Atlassian absente");
     }
 }

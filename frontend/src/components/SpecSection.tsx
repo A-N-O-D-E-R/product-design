@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Markdown } from '@/components/Markdown'
 import { RoadmapSection } from '@/components/RoadmapSection'
 import { api, postSse } from '@/lib/api'
 
 type Version = { id: number; version: number; createdAt: string }
-type Spec = Version & { contenu: string }
+type Spec = Version & { contenu: string; confluenceVersion: number | null; confluenceEspace: string | null }
+type Publication = { espace: string; url: string; versionConfluence: number; creee: boolean }
 
 /** Spec du Projet : génération forcée streamée (E-19), versions consultables (E-22), avertissements de traçabilité (E-21). */
 export function SpecSection({ projetId, mapVide }: { projetId: number; mapVide: boolean }) {
@@ -14,6 +16,9 @@ export function SpecSection({ projetId, mapVide }: { projetId: number; mapVide: 
   const [enCours, setEnCours] = useState<string>()
   const [avertissements, setAvertissements] = useState<string[]>([])
   const [erreur, setErreur] = useState<string>()
+  const [espace, setEspace] = useState('')
+  const [publication, setPublication] = useState<Publication>()
+  const [publiant, setPubliant] = useState(false)
 
   function charger(id?: number) {
     api<Version[]>(`/api/projets/${projetId}/specs`).then((v) => {
@@ -24,6 +29,25 @@ export function SpecSection({ projetId, mapVide }: { projetId: number; mapVide: 
   }
 
   useEffect(() => charger(), [projetId])
+  useEffect(() => {
+    setPublication(undefined)
+    if (spec?.confluenceEspace) setEspace(spec.confluenceEspace)
+  }, [spec?.id])
+
+  /** Publie la version affichée : crée la page du Projet, ou en ajoute une version Confluence. */
+  async function publier() {
+    if (!spec) return
+    setErreur(undefined)
+    setPubliant(true)
+    try {
+      const p = await api<Publication>(`/api/specs/${spec.id}/export-confluence`, { method: 'POST', body: JSON.stringify({ espace }) })
+      setPublication(p)
+      api<Spec>(`/api/specs/${spec.id}`).then(setSpec)
+    } catch (e) {
+      setErreur((e as Error).message)
+    }
+    setPubliant(false)
+  }
 
   async function generer() {
     setErreur(undefined)
@@ -80,6 +104,29 @@ export function SpecSection({ projetId, mapVide }: { projetId: number; mapVide: 
         <div className="max-h-[600px] overflow-auto text-sm"><Markdown>{spec.contenu}</Markdown></div>
       ) : (
         <p className="text-sm text-muted-foreground">Aucune Spec générée.</p>
+      )}
+      {spec && enCours === undefined && (
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <Input
+            aria-label="Clé de l'espace Confluence"
+            placeholder="Espace Confluence (ex. PD)"
+            className="max-w-56"
+            value={espace}
+            disabled={!!spec.confluenceEspace}
+            onChange={(e) => setEspace(e.target.value)}
+          />
+          <Button size="sm" variant="outline" onClick={publier} disabled={publiant || !espace.trim()}>
+            Publier sur Confluence
+          </Button>
+          {spec.confluenceVersion && !publication && (
+            <span className="text-muted-foreground">Publiée (version Confluence {spec.confluenceVersion}).</span>
+          )}
+          {publication && (
+            <a href={publication.url} target="_blank" rel="noreferrer" className="underline">
+              {publication.creee ? 'Page créée' : `Version ${publication.versionConfluence} publiée`} dans {publication.espace}
+            </a>
+          )}
+        </div>
       )}
       {spec && enCours === undefined && <RoadmapSection specId={spec.id} />}
     </section>

@@ -15,13 +15,14 @@ Application locale, mono-utilisateur, sans authentification. Vocabulaire du doma
 4. **Générer la Spec** (gabarit fixe à 7 sections, chaque exigence `E-n` cite ses Décisions), versionnée.
 5. **Générer la Roadmap** depuis une version de Spec : Jalons et Tickets (vertical slices), éditables.
 6. **Exporter vers Jira** : un Epic par Jalon, une Story par Ticket, liens « Blocks ». Le ré-export met à jour l'existant et ne supprime jamais rien dans Jira.
+7. **Publier la Spec sur Confluence** : une page par Projet ; chaque version de Spec publiée en devient une version Confluence.
 
 ## Prérequis
 
 - **Java 25** (ex. `sdk install java 25.0.2-oracle`) et Maven 3.9+.
 - Node n'est pas requis : le build Maven installe sa propre copie (v20.20) pour construire le front.
 - Un accès à Claude : une clé API Anthropic, **ou** un compte AWS avec Claude in Amazon Bedrock (accès au modèle activé, permission `bedrock-mantle:CreateInference`).
-- Pour l'export, un site Jira Cloud, un email et un [token API](https://id.atlassian.com/manage-profile/security/api-tokens) (non scopé).
+- Pour l'export, un site Atlassian Cloud, un email et un [token API](https://id.atlassian.com/manage-profile/security/api-tokens) (non scopé). La même config sert à Jira et à Confluence.
 
 ## Configuration
 
@@ -95,7 +96,7 @@ Spring Boot 4.1, un seul jar, virtual threads
    ├─ prompts/*.md         prompts de la Spec et de la Roadmap
    ├─ SDK Java Anthropic   streaming, tool `record` strict, web search, prompt caching
    │                       (API Anthropic, ou Amazon Bedrock via BedrockMantleBackend)
-   ├─ JiraClient           API REST v3 (Basic, bulk, ADF, Retry-After)
+   ├─ AtlassianClient      Jira v3 (Basic, bulk, ADF, Retry-After) et Confluence v2 (pages en ADF, versions)
    └─ JdbcClient + Flyway ─▶ SQLite (une connexion)
 ```
 
@@ -107,7 +108,7 @@ Spring Boot 4.1, un seul jar, virtual threads
 
 | Chemin | Contenu |
 |---|---|
-| `src/main/java/productdesigner/` | Backend : un contrôleur par zone (Projet, Session, Map, Décision, Spec, Roadmap, Jira) |
+| `src/main/java/productdesigner/` | Backend : un contrôleur par zone (Projet, Session, Map, Décision, Spec, Roadmap, Jira, Confluence) |
 | `src/main/resources/db/migration/` | Schéma SQLite (Flyway) |
 | `frontend/src/` | Pages et composants du front |
 | `.scratch/productdesigner-mvp/` | Map de conception, Questions résolues, Spec du MVP, prototype de l'écran de Session |
