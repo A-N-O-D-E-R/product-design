@@ -160,6 +160,11 @@ class RoadmapController {
                 consommation.enregistrer(projet, "roadmap", anthropic.model(), accumulator.message().usage());
                 RoadmapGeneree roadmap = accumulator.message(RoadmapGeneree.class).content().stream()
                         .flatMap(b -> b.text().stream()).findFirst().orElseThrow().text();
+                if (roadmap.jalons() == null || roadmap.jalons().stream().allMatch(j -> j.tickets() == null || j.tickets().isEmpty())) {
+                    // Sortie inexploitable : l'ancienne Roadmap (et ses éditions) reste en place.
+                    log.warn("Roadmap sans Ticket pour la Spec {} ; sortie brute : {}", specId, accumulator.message().content());
+                    throw new IllegalStateException("la Roadmap générée ne contient aucun Ticket ; Roadmap existante conservée");
+                }
                 // Appel depuis ce thread, hors proxy Spring : la transaction est explicite (tout ou rien).
                 List<String> avertissements = transaction.execute(t -> enregistrer(specId, roadmap, exigences(spec)));
                 emitter.send(SseEmitter.event().name("fin").data(Map.of("avertissements", avertissements)));

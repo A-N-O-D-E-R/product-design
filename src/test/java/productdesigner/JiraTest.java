@@ -175,7 +175,7 @@ class JiraTest {
         String lister = jdbc.sql("SELECT t.jira_key FROM ticket t JOIN jalon j ON j.id = t.jalon_id WHERE j.spec_id = ? AND t.titre = 'Lister'")
                 .param(spec).query(String.class).single();
         assertThat(requetes).anyMatch(q -> q.startsWith("POST /rest/api/3/issueLink") && q.contains("\"name\":\"Blocks\"")
-                && q.contains("\"outwardIssue\":{\"key\":\"" + creer + "\"}") && q.contains("\"inwardIssue\":{\"key\":\"" + lister + "\"}"));
+                && q.contains("\"inwardIssue\":{\"key\":\"" + creer + "\"}") && q.contains("\"outwardIssue\":{\"key\":\"" + lister + "\"}"));
 
         assertThat(requetes.getFirst()).startsWith("GET /rest/api/3/issue/createmeta/PD/issuetypes Basic bW9pQGV4ZW1wbGUuZnI6c2VjcmV0");
         List<String> epics = requetes.stream().filter(q -> q.startsWith("POST /rest/api/3/issue ")).toList();

@@ -235,10 +235,13 @@ class AtlassianClient {
                 base + String.valueOf(liens.getOrDefault("webui", "")));
     }
 
-    /** Lien « Blocks » : `bloquant` blocks `bloque` (outwardIssue = celui qui bloque). */
+    /**
+     * Lien « Blocks » : `bloquant` blocks `bloque`. Vérifié sur Jira Cloud : c'est `inwardIssue` qui « blocks »
+     * `outwardIssue` (l'inverse de l'intuition, et la doc ne le précise pas).
+     */
     void lierBlocage(String bloquant, String bloque) {
         appel(() -> client("jira").post().uri("/rest/api/3/issueLink").contentType(MediaType.APPLICATION_JSON)
-                .body(Map.of("type", Map.of("name", "Blocks"), "outwardIssue", Map.of("key", bloquant), "inwardIssue", Map.of("key", bloque)))
+                .body(Map.of("type", Map.of("name", "Blocks"), "inwardIssue", Map.of("key", bloquant), "outwardIssue", Map.of("key", bloque)))
                 .retrieve().toBodilessEntity());
     }
 
