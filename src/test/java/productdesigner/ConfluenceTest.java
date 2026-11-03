@@ -152,4 +152,10 @@ class ConfluenceTest {
         assertThat(post("/api/specs/" + spec(p, 2) + "/export-confluence", "{\"espace\":\"NOPE\"}")).contains("Espace Confluence NOPE introuvable");
         assertThat(jdbc.sql("SELECT confluence_espace FROM projet WHERE id = ?").param(p).query(String.class).optional()).isEmpty();
     }
+
+    @Test
+    void cleDEspacePersonnelGardeSaCasse() {
+        assertThat(ConfluenceController.cle(" pd ")).isEqualTo("PD");
+        assertThat(ConfluenceController.cle("~712020bcba375b35da47e2bfeb2d0063230003")).isEqualTo("~712020bcba375b35da47e2bfeb2d0063230003");
+    }
 }

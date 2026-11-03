@@ -41,7 +41,7 @@ class ConfluenceController {
                 .optional().orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Spec introuvable."));
         long projet = (long) spec.get("projet");
         String espace = !"null".equals(spec.get("espace")) ? (String) spec.get("espace")
-                : demande.espace() == null ? "" : demande.espace().strip().toUpperCase();
+                : demande.espace() == null ? "" : cle(demande.espace());
         if (espace.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Clé de l'espace Confluence obligatoire.");
         }
@@ -65,6 +65,12 @@ class ConfluenceController {
         jdbc.sql("UPDATE projet SET confluence_espace = ?, confluence_page_id = ? WHERE id = ?").params(espace, page.id(), projet).update();
         jdbc.sql("UPDATE spec SET confluence_version = ? WHERE id = ?").params(page.version(), specId).update();
         return new Publication(espace, page.url(), page.version(), creee);
+    }
+
+    /** Clés d'espace en majuscules, sauf les espaces personnels (« ~ » suivi d'un id en minuscules). */
+    static String cle(String espace) {
+        String c = espace.strip();
+        return c.startsWith("~") ? c : c.toUpperCase();
     }
 
     /** Le titre `# ` de la Spec double celui de la page Confluence. */
