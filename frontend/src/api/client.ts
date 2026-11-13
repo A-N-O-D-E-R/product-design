@@ -1,37 +1,8 @@
-export type Projet = { id: number; nom: string; description: string; createdAt: string }
-export type QuestionMap = {
-  id: number
-  numero: number
-  titre: string
-  corps: string
-  type: 'grilling' | 'research' | 'prototype' | 'tache'
-  statut: 'open' | 'claimed' | 'resolved' | 'hors_perimetre'
-  blockedBy: number[]
-  ouvrable: boolean
-}
-export type Carte = {
-  destination: string
-  notes: string
-  questions: QuestionMap[]
-  brouillard: { id: number; texte: string }[]
-  horsPerimetre: { id: number; texte: string }[]
-}
-export type Session = {
-  id: number
-  projetId: number
-  methode: string
-  statut: string
-  createdAt: string
-  questionId: number | null
-  question: string | null
-  continuedFrom: number | null
-  tache: 'en_cours' | 'terminee' | 'echec' | null
-  progression: string | null
-}
-export type Artefact = { id: number; type: 'research_md' | 'prototype_html'; contenu: string; createdAt: string }
-export type QuestionRound = { id: string; titre: string; corps: string; recommandation?: string }
-export type Round = { questions: QuestionRound[] }
-export type Affichage = { id: number; role: 'user' | 'assistant'; texte: string; round?: Round | null; incomplet?: boolean }
+/** Requête JSON : corps sérialisé seulement s'il y en a un. */
+export const json = (method: string, body?: unknown): RequestInit => ({
+  method,
+  body: body === undefined ? undefined : JSON.stringify(body),
+})
 
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const r = await fetch(path, {
@@ -46,7 +17,9 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 /** POST qui répond en SSE ; appelle `onEvent` pour chaque événement nommé. */
-export async function postSse(path: string, body: unknown, onEvent: (name: string, data: any) => void) {
+export type OnEvent = (name: string, data: any) => void
+
+export async function postSse(path: string, body: unknown, onEvent: OnEvent) {
   const r = await fetch(path, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },

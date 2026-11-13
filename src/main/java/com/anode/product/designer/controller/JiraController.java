@@ -1,5 +1,6 @@
 package com.anode.product.designer.controller;
 
+import lombok.RequiredArgsConstructor;
 import com.anode.product.designer.service.Atlassian;
 import com.anode.product.designer.service.JiraService;
 
@@ -13,15 +14,12 @@ import org.springframework.web.bind.annotation.RestController;
 
 /** Export d'une Roadmap vers Jira Cloud (E-26 à E-30), voir {@link JiraService}. */
 @RestController
+@RequiredArgsConstructor
 class JiraController {
 
     record Demande(String projet) {}
 
     private final JiraService jira;
-
-    JiraController(JiraService jira) {
-        this.jira = jira;
-    }
 
     @GetMapping("/api/jira/status")
     Map<String, Object> status() {

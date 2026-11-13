@@ -1,37 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
-import { api, type Carte } from '@/lib/api'
-
-type Proposee = { messageId: number; indice: number; texte: string }
-type Decision = { id: number; numero: number; texte: string; sessionId: number; confirmedAt: string }
+import { useDecisions } from '@/hooks/useDecisions'
+import type { Proposee } from '@/api/decisions'
 
 /** Panneau latéral de la Session (D-15) : Décisions proposées, Décisions du Projet, Questions ouvertes. */
 export function Panneau({ sessionId, projetId, version }: { sessionId: number; projetId: number; version: number }) {
-  const [proposees, setProposees] = useState<Proposee[]>([])
-  const [decisions, setDecisions] = useState<Decision[]>([])
-  const [carte, setCarte] = useState<Carte>()
-  const [erreur, setErreur] = useState<string>()
-
-  function charger() {
-    api<{ proposees: Proposee[]; decisions: Decision[] }>(`/api/sessions/${sessionId}/decisions`).then((p) => {
-      setProposees(p.proposees)
-      setDecisions(p.decisions)
-    })
-    api<Carte>(`/api/projets/${projetId}/map`).then(setCarte)
-  }
-
-  useEffect(charger, [sessionId, projetId, version])
-
-  async function confirmer(p: Proposee, texte: string) {
-    setErreur(undefined)
-    try {
-      await api(`/api/sessions/${sessionId}/decisions`, { method: 'POST', body: JSON.stringify({ ...p, texte }) })
-    } catch (e) {
-      setErreur((e as Error).message)
-    }
-    charger()
-  }
+  const { proposees, decisions, carte, erreur, confirmer } = useDecisions(sessionId, projetId, version)
 
   const ouvertes = carte?.questions.filter((q) => q.statut === 'open') ?? []
 
@@ -42,7 +17,7 @@ export function Panneau({ sessionId, projetId, version }: { sessionId: number; p
         {proposees.map((p) => (
           <Proposition key={`${p.messageId}:${p.indice}`} proposee={p} onConfirmer={(t) => confirmer(p, t)} />
         ))}
-        {erreur && <p role="alert" className="text-red-700">{erreur}</p>}
+        {erreur && <p role="alert" className="text-destructive">{erreur}</p>}
       </Bloc>
       <Bloc titre="Décisions">
         {decisions.length === 0 && <p className="text-muted-foreground">Aucune.</p>}
@@ -77,7 +52,7 @@ function Proposition({ proposee, onConfirmer }: { proposee: Proposee; onConfirme
   const [edition, setEdition] = useState(false)
   const [texte, setTexte] = useState(proposee.texte)
   return (
-    <div className="grid gap-2 rounded-md border border-amber-300 bg-amber-50 p-2">
+    <div className="grid gap-2 rounded-md border border-warning/50 bg-warning/15 p-2">
       {edition ? (
         <Textarea aria-label="Texte de la Décision" value={texte} onChange={(e) => setTexte(e.target.value)} />
       ) : (

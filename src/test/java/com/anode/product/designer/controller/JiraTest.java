@@ -1,5 +1,6 @@
 package com.anode.product.designer.controller;
 
+import com.anode.product.designer.service.RoadmapService;
 import com.anode.product.designer.service.Atlassian;
 import com.anode.product.designer.service.ConfigManquanteException;
 
@@ -32,9 +33,9 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
-import com.anode.product.designer.controller.RoadmapController.JalonGenere;
-import com.anode.product.designer.controller.RoadmapController.RoadmapGeneree;
-import com.anode.product.designer.controller.RoadmapController.TicketGenere;
+import com.anode.product.designer.service.RoadmapService.JalonGenere;
+import com.anode.product.designer.service.RoadmapService.RoadmapGeneree;
+import com.anode.product.designer.service.RoadmapService.TicketGenere;
 
 /** Export vers un faux Jira Cloud qui enregistre les requêtes. */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -147,7 +148,7 @@ class JiraTest {
     JdbcClient jdbc;
 
     @Autowired
-    RoadmapController roadmaps;
+    RoadmapService roadmaps;
 
     String post(String path, String json) throws Exception {
         return HttpClient.newHttpClient().send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))

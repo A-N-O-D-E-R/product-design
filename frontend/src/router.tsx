@@ -1,42 +1,32 @@
 import { useEffect, useState } from 'react'
 import { createRootRoute, createRoute, createRouter, Outlet } from '@tanstack/react-router'
+import { status as chargerStatus, type Status } from '@/api/status'
+import { AppSidebar } from '@/components/layout/AppSidebar'
+import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
 import { Projets } from '@/pages/Projets'
 import { ProjetPage } from '@/pages/ProjetPage'
 import { SessionPage } from '@/pages/SessionPage'
 
-type Status = { configure: boolean; message?: string; fournisseur?: string; model?: string }
-
-const FOURNISSEURS: Record<string, string> = {
-  anthropic: 'API Anthropic',
-  openai: 'OpenAI',
-  'bedrock-converse': 'Amazon Bedrock',
-  ollama: 'Ollama',
-}
-
 function Layout() {
   const [status, setStatus] = useState<Status>()
+  const [open, setOpen] = useState(false)
   useEffect(() => {
-    fetch('/api/status').then((r) => r.json()).then(setStatus)
+    chargerStatus().then(setStatus)
   }, [])
   return (
-    <div className="min-h-screen">
-      <header className="flex items-baseline gap-3 border-b px-4 py-2">
-        <span className="font-semibold">productDesigner</span>
-        {status?.model && (
-          <span className="text-xs text-muted-foreground">
-            {FOURNISSEURS[status.fournisseur ?? ''] ?? status.fournisseur} · {status.model}
-          </span>
+    <SidebarProvider style={{ '--sidebar-width': '13rem' } as React.CSSProperties} open={open} onOpenChange={setOpen}>
+      <AppSidebar status={status} onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)} />
+      <SidebarInset className="min-w-0">
+        {status && !status.configure && (
+          <div role="alert" className="border-b bg-warning/15 px-4 py-2 text-sm text-foreground">
+            {status.message}
+          </div>
         )}
-      </header>
-      {status && !status.configure && (
-        <div role="alert" className="border-b bg-amber-50 px-4 py-2 text-sm text-amber-900">
-          {status.message}
-        </div>
-      )}
-      <main className="p-4">
-        <Outlet />
-      </main>
-    </div>
+        <main className="p-4">
+          <Outlet />
+        </main>
+      </SidebarInset>
+    </SidebarProvider>
   )
 }
 

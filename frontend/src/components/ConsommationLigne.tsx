@@ -1,17 +1,16 @@
 import { useEffect, useState } from 'react'
-import { api } from '@/lib/api'
-
-type Total = { inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheWriteTokens: number; cout: number | null }
+import { consommation, type Total } from '@/api/consommation'
 
 const nombre = new Intl.NumberFormat('fr-FR')
 const dollars = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'USD', maximumFractionDigits: 4 })
 
 /** Tokens et coût estimé (D-29) ; `version` force le rechargement après un échange. */
-export function ConsommationLigne({ url, version = 0 }: { url: string; version?: number }) {
+export function ConsommationLigne({ sessionId, projetId, version = 0 }: { sessionId?: number; projetId?: number; version?: number }) {
   const [total, setTotal] = useState<Total>()
   useEffect(() => {
-    api<Total>(url).then(setTotal)
-  }, [url, version])
+    const requete = sessionId !== undefined ? consommation.session(sessionId) : consommation.projet(projetId!)
+    requete.then(setTotal)
+  }, [sessionId, projetId, version])
   if (!total) return null
   const tokens = total.inputTokens + total.outputTokens + total.cacheReadTokens + total.cacheWriteTokens
   return (
