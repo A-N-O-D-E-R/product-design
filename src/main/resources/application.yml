@@ -13,6 +13,21 @@ spring:
   threads:
     virtual:
       enabled: true
+  ai:
+    model:
+      # Fournisseur LLM : anthropic, openai (ou compatible : base-url), bedrock-converse, ollama.
+      chat: anthropic
+      # Seul le chat sert : aucun autre modèle n'est créé.
+      embedding: none
+      image: none
+      audio:
+        speech: none
+        transcription: none
+      moderation: none
+    anthropic:
+      chat:
+        options:
+          model: claude-opus-5-5
   datasource:
     url: jdbc:sqlite:${productdesigner.data-dir:${user.home}/.productdesigner}/data.db?foreign_keys=on&busy_timeout=5000
     hikari:
@@ -20,6 +35,10 @@ spring:
       maximum-pool-size: 1
 
 productdesigner:
+  # Recherche web de la research sur tout fournisseur (outil client) : clé API Tavily. Sans clé, seule l'API Anthropic
+  # en a une (recherche serveur) ; ailleurs la research est refusée.
+  recherche:
+    tavily-api-key: ""
   # $ par million de tokens (prix API Anthropic). cache-write : écriture de cache 5 min (1,25 × input).
   tarifs:
     claude-opus-5-5: { input: 4.00, output: 20.00, cache-read: 0.20, cache-write: 5.00 }

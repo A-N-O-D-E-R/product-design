@@ -21,7 +21,7 @@ Application locale, mono-utilisateur, sans authentification. Vocabulaire du doma
 
 - **Java 25** (ex. `sdk install java 25.0.2-oracle`) et Maven 3.9+.
 - Node n'est pas requis : le build Maven installe sa propre copie (v20.20) pour construire le front.
-- Un accès à Claude : une clé API Anthropic, **ou** un compte AWS avec Claude in Amazon Bedrock (accès au modèle activé, permission `bedrock-mantle:CreateInference`).
+- Un fournisseur LLM : API Anthropic (défaut), OpenAI ou compatible, Amazon Bedrock, ou Ollama en local (voir [Fournisseur LLM](#fournisseur-llm)).
 - Pour l'export, un site Atlassian Cloud, un email et un [token API](https://id.atlassian.com/manage-profile/security/api-tokens) (non scopé). La même config sert à Jira et à Confluence.
 
 ## Configuration
@@ -29,26 +29,23 @@ Application locale, mono-utilisateur, sans authentification. Vocabulaire du doma
 Les secrets vivent hors du dépôt, dans `~/.productdesigner/application.yml` (importé au démarrage) :
 
 ```yaml
-productdesigner:
-  anthropic:
-    api-key: sk-ant-...
-    # model: claude-opus-5-5          # défaut
-  jira:
-    site: https://<site>.atlassian.net
-    email: moi@exemple.fr
-    token: <token API Atlassian>
+spring:
+  ai:
+    anthropic:
+      api-key: sk-ant-...
+      # chat.options.model: claude-opus-5-5   # défaut
 ```
 
 ### Jira et Confluence
 
-Même compte Atlassian pour les deux. Le token API conseillé est **scopé** (« Create API token with scopes ») ; il passe par la passerelle `api.atlassian.com`, qui demande le `cloudId` du site (`https://<site>.atlassian.net/_edge/tenant_info`) :
+Clients fournis par [atlassian-springboot-starter](../atlassian-springboot-starter) (`anode.atlassian.*`). Même compte Atlassian pour les deux. Le token API conseillé est **scopé** (« Create API token with scopes ») ; il passe par la passerelle `api.atlassian.com`, qui demande le `cloudId` du site (`https://<site>.atlassian.net/_edge/tenant_info`) :
 
 ```yaml
-productdesigner:
-  jira:
-    site: https://<site>.atlassian.net
+anode:
+  atlassian:
+    base-url: https://<site>.atlassian.net
     email: moi@exemple.fr
-    token: <token API scopé>
+    api-token: <token API scopé>
     cloud-id: <cloudId>          # absent : token sans scope, appels directs au site
 ```
 
@@ -61,31 +58,36 @@ Scopes minimaux :
 
 Un token expire au bout d'un an au plus ; l'app affiche alors « Token Jira expiré ou invalide ».
 
-### Amazon Bedrock
+### Fournisseur LLM
 
-À la place de la clé Anthropic :
+Via [Spring AI](https://docs.spring.io/spring-ai/reference/) : `spring.ai.model.chat` choisit le fournisseur, ses réglages suivent les propriétés Spring AI (`spring.ai.<fournisseur>.*`).
 
 ```yaml
-productdesigner:
-  anthropic:
-    fournisseur: bedrock
-    # model: anthropic.claude-opus-5-5   # défaut sur Bedrock (préfixe « anthropic. »)
-  bedrock:
-    profil: mon-profil-aws     # facultatif ; profil SSO compris (aws sso login --profile mon-profil-aws)
-    # region: eu-west-3        # facultatif ; sinon celle du profil, ou AWS_REGION
+spring:
+  ai:
+    model:
+      chat: anthropic          # anthropic (défaut) | openai | bedrock-converse | ollama
+    openai:                    # OpenAI, ou toute API compatible via base-url
+      api-key: sk-...
+      chat.options.model: gpt-5
+    bedrock:
+      aws:
+        region: eu-west-1
+        profile.name: mon-profil-aws   # profil SSO compris (aws sso login --profile mon-profil-aws)
+      converse.chat.options.model: eu.anthropic.claude-opus-5-5-v1:0
+    ollama:
+      base-url: http://localhost:11434
+      chat.options.model: qwen3
 ```
 
-Sans profil ni région, la chaîne AWS standard s'applique (variables `AWS_*`, `~/.aws/config`, rôle d'instance). Les appels passent par Claude in Amazon Bedrock (endpoint `bedrock-mantle`, signature SigV4).
+Le modèle doit savoir appeler des outils : le tool `record` porte les sorties structurées de chaque tour. Sur Bedrock, la chaîne AWS standard s'applique sans profil (variables `AWS_*`, `~/.aws/config`, rôle d'instance).
 
-Constaté au premier test réel (novembre 2026) :
-- toutes les régions listées par la documentation n'ont pas l'endpoint `bedrock-mantle` : `eu-west-3` (Paris) n'en a pas, `eu-west-1` et `eu-central-1` oui. L'app le signale (« Endpoint Bedrock introuvable ») ;
-- l'accès aux modèles dépend du compte et de la région : Opus 5.5 et Sonnet 5.5 peuvent être absents alors qu'Opus 5 est ouvert. L'app le signale (« Modèle indisponible »), il suffit de régler `productdesigner.anthropic.model`.
+Ce qui dépend du fournisseur :
+- **Recherche web** (Méthode research) : avec `productdesigner.recherche.tavily-api-key` (clé [Tavily](https://tavily.com), payante au-delà du quota gratuit), l'app exécute elle-même l'outil `web_search`, sur tout fournisseur. Sans clé, seule l'API Anthropic en a une (recherche serveur) ; ailleurs une Question *research* ne peut pas être ouverte.
+- **Effort et prompt caching** : réglés pour Anthropic seulement ; les autres fournisseurs gardent leurs défauts (`spring.ai.<fournisseur>.chat.options.*`, dont `max-tokens`).
+- **Coût estimé** : `productdesigner.tarifs.<modèle>` ne connaît que les prix de l'API Anthropic ; un autre modèle s'affiche « inconnu » sans entrée de tarif.
 
-Limites sur Bedrock :
-- **Pas de recherche web** (aucun outil serveur sur Bedrock) : une Question *research* ne peut pas être ouverte. La passer en *grilling*, ou utiliser le fournisseur `anthropic`.
-- **Coût estimé** : les tarifs Bedrock diffèrent de ceux de l'API Anthropic ; sans entrée `productdesigner.tarifs.anthropic.claude-opus-5-5`, le coût s'affiche « inconnu ».
-
-Sans accès Claude configuré, l'app démarre et affiche un bandeau ; sans config Jira, l'export l'indique. Autres réglages (valeurs par défaut dans [`src/main/resources/application.yml`](src/main/resources/application.yml), surchargeables au même endroit) :
+Sans fournisseur LLM configuré, l'app démarre et affiche un bandeau ; sans config Jira, l'export l'indique. Autres réglages (valeurs par défaut dans [`src/main/resources/application.yml`](src/main/resources/application.yml), surchargeables au même endroit) :
 
 | Propriété | Défaut | Rôle |
 |---|---|---|
@@ -93,6 +95,7 @@ Sans accès Claude configuré, l'app démarre et affiche un bandeau ; sans confi
 | `productdesigner.tarifs.<modèle>` | Opus 5.5, Sonnet 5.5 | $ par million de tokens, pour le coût estimé |
 | `productdesigner.contexte.fenetre` / `.seuil` | `1000000` / `0.8` | Bandeau « Continuer dans une nouvelle Session » |
 | `productdesigner.jira.backoff-ms` | `2000` | Base du backoff sur un 429 Jira |
+| `productdesigner.recherche.tavily-api-key` | vide | Recherche web client de la research, tout fournisseur |
 
 ## Lancer
 
@@ -105,7 +108,7 @@ Puis http://localhost:8080. Le jar contient le front ; la base et ses migrations
 
 **Développement** : `mvn spring-boot:run` pour le backend (port 8080) et `npm run dev` dans `frontend/` (le serveur Vite relaie `/api`).
 
-**Tests** : `mvn test` (ajouter `-Dskip.npm -Dskip.installnodenpm` pour ne pas rebuilder le front). Ils tournent contre un faux serveur Anthropic et un faux Jira, sans appel réseau.
+**Tests** : `mvn test` (ajouter `-Dskip.npm -Dskip.installnodenpm` pour ne pas rebuilder le front). Ils tournent contre de faux serveurs (Anthropic, OpenAI, Tavily, Jira, Confluence), sans appel réseau.
 
 ## Architecture
 
@@ -116,14 +119,17 @@ navigateur (React, TanStack Router, shadcn)
 Spring Boot 4.1, un seul jar, virtual threads
    ├─ methodes/*.md        prompts des Méthodes (frontmatter : champs de record utilisés)
    ├─ prompts/*.md         prompts de la Spec et de la Roadmap
-   ├─ SDK Java Anthropic   streaming, tool `record` strict, web search, prompt caching
-   │                       (API Anthropic, ou Amazon Bedrock via BedrockMantleBackend)
-   ├─ AtlassianClient      Jira v3 (Basic, bulk, ADF, Retry-After) et Confluence v2 (pages en ADF, versions)
+   ├─ Llm (Spring AI)      streaming, tool `record`, sortie structurée ; Anthropic, OpenAI, Bedrock, Ollama
+   │                       (effort, prompt caching et recherche serveur sur Anthropic)
+   ├─ Recherche            outil web_search exécuté par l'app (Tavily), tout fournisseur
+   ├─ JiraService          export Roadmap vers Jira v3 (bulk, ADF), via atlassian-springboot-starter
+   ├─ ConfluenceService    publication de la Spec dans Confluence v2 (pages en ADF, versions)
+   ├─ Atlassian            config absente, 401, reprises sur 429 (Retry-After) pour les deux
    └─ JdbcClient + Flyway ─▶ SQLite (une connexion)
 ```
 
 - **`record`** : un seul tool, au schéma strict commun à toutes les Méthodes, porte les sorties structurées d'un tour (round, Décisions proposées, Questions, modifications de Map, prototype). Seules les Décisions demandent une confirmation.
-- Les messages sont stockés en blocs bruts du SDK et rejoués tels quels (blocs thinking et résultats de recherche chiffrés compris).
+- Les messages sont stockés dans un format neutre (blocs `text`, `tool_use`, `tool_result`) et convertis en messages Spring AI à chaque tour (`Conversation`). Les blocs propres à un fournisseur (thinking, résultats de recherche serveur chiffrés) ne sont pas rejoués.
 - Le contenu HTML d'un prototype est non fiable : iframe `sandbox="allow-scripts"` sans `allow-same-origin`, CSP sans réseau, et refus serveur des requêtes `Origin: null`.
 
 ## Organisation du dépôt
@@ -140,7 +146,7 @@ Spring Boot 4.1, un seul jar, virtual threads
 
 ## État de validation
 
-MVP terminé : 22 Tickets de la Roadmap, plus les suites de revue et du test réel. 66 tests automatisés, sans appel réseau (faux serveurs Anthropic, Bedrock, Jira et Confluence).
+MVP terminé : 22 Tickets de la Roadmap, plus les suites de revue et du test réel. Tests automatisés sans appel réseau (faux serveurs Anthropic, OpenAI, Tavily, Jira et Confluence).
 
 Vérifié en réel le 2026-11-03 (détail : [`.scratch/productdesigner-build/issues/24-test-reel.md`](.scratch/productdesigner-build/issues/24-test-reel.md)) :
 
@@ -153,6 +159,8 @@ Vérifié en réel le 2026-11-03 (détail : [`.scratch/productdesigner-build/iss
 | Research (recherche web) | **non** | demande une clé API Anthropic (indisponible sur Bedrock) |
 | Prototype | non | testé contre un faux serveur ; isolation de l'iframe vérifiée dans Chromium |
 | API Anthropic directe | non | pas de clé disponible |
+
+Ce test réel date d'avant Spring AI (Bedrock via l'endpoint Mantle) : Bedrock Converse, OpenAI réel, Ollama et Tavily réel restent à vérifier ([ADR 0004](docs/adr/0004-fournisseur-llm-spring-ai.md)).
 
 Décisions prises après la Spec du MVP : [`docs/adr/`](docs/adr/).
 

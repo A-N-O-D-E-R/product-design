@@ -16,4 +16,5 @@ La Spec ne vivait que dans l'app. L'utilisateur travaille avec Jira et Confluenc
 
 - Vérifié en réel (site audioptictradeservices, projet PDTEST, espace personnel) : Epics et Stories sous le bon Epic, descriptions formatées, ré-export sans doublon, page Confluence créée puis versionnée.
 - Liens « Blocks » : Jira lit `inwardIssue` comme celui qui bloque (la documentation ne le précise pas) ; corrigé après le premier export réel.
+- Depuis : les clients HTTP viennent d'atlassian-springboot-starter (`JiraClient`, `ConfluenceClient`, passerelle comprise) ; la config passe sous `anode.atlassian.base-url|email|api-token|cloud-id`. `JiraService` et `ConfluenceService` portent la logique de l'export ; `Atlassian` traite config absente, 401 et reprises sur 429 pour les deux.
 - Les tableaux markdown d'une Spec sortiraient en texte brut dans Confluence (ADF minimal).

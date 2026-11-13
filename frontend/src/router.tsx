@@ -4,7 +4,14 @@ import { Projets } from '@/pages/Projets'
 import { ProjetPage } from '@/pages/ProjetPage'
 import { SessionPage } from '@/pages/SessionPage'
 
-type Status = { anthropic: boolean; message?: string; fournisseur?: string; model?: string }
+type Status = { configure: boolean; message?: string; fournisseur?: string; model?: string }
+
+const FOURNISSEURS: Record<string, string> = {
+  anthropic: 'API Anthropic',
+  openai: 'OpenAI',
+  'bedrock-converse': 'Amazon Bedrock',
+  ollama: 'Ollama',
+}
 
 function Layout() {
   const [status, setStatus] = useState<Status>()
@@ -17,11 +24,11 @@ function Layout() {
         <span className="font-semibold">productDesigner</span>
         {status?.model && (
           <span className="text-xs text-muted-foreground">
-            {status.fournisseur === 'bedrock' ? 'Amazon Bedrock' : 'API Anthropic'} · {status.model}
+            {FOURNISSEURS[status.fournisseur ?? ''] ?? status.fournisseur} · {status.model}
           </span>
         )}
       </header>
-      {status && !status.anthropic && (
+      {status && !status.configure && (
         <div role="alert" className="border-b bg-amber-50 px-4 py-2 text-sm text-amber-900">
           {status.message}
         </div>
