@@ -4,6 +4,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import com.anode.product.designer.repository.ProjetRepository;
+import com.anode.product.designer.repository.SpecRepository;
+import com.anode.product.designer.repository.SpecRepository.PourPublication;
+
 import com.anode.atlassian.confluence.ConfluenceClient;
 import com.anode.atlassian.confluence.ConfluenceClient.Body;
 import com.anode.atlassian.confluence.ConfluenceClient.NewPage;
@@ -13,7 +17,6 @@ import com.anode.atlassian.confluence.ConfluenceClient.Version;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
-import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.server.ResponseStatusException;
@@ -29,14 +32,16 @@ public class ConfluenceService {
 
     record Page(String id, int version, String url) {}
 
-    private final JdbcClient jdbc;
+    private final SpecRepository specs;
+    private final ProjetRepository projets;
     private final ObjectProvider<ConfluenceClient> confluence;
     private final Atlassian atlassian;
     private final String site;
 
-    public ConfluenceService(JdbcClient jdbc, ObjectProvider<ConfluenceClient> confluence, Atlassian atlassian,
+    public ConfluenceService(SpecRepository specs, ProjetRepository projets, ObjectProvider<ConfluenceClient> confluence, Atlassian atlassian,
                              @Value("${anode.atlassian.base-url:}") String site) {
-        this.jdbc = jdbc;
+        this.specs = specs;
+        this.projets = projets;
         this.confluence = confluence;
         this.atlassian = atlassian;
         this.site = site.replaceAll("/+$", "");
@@ -47,25 +52,18 @@ public class ConfluenceService {
     }
 
     public Publication publier(long specId, String espaceDemande) {
-        var spec = jdbc.sql("""
-                        SELECT s.projet_id, s.version, s.contenu, p.nom, p.confluence_espace, p.confluence_page_id
-                        FROM spec s JOIN projet p ON p.id = s.projet_id WHERE s.id = ?""")
-                .param(specId)
-                .query((rs, n) -> Map.of("projet", rs.getLong(1), "version", rs.getInt(2), "contenu", rs.getString(3), "nom", rs.getString(4),
-                        "espace", String.valueOf(rs.getString(5)), "page", String.valueOf(rs.getString(6))))
-                .optional().orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Spec introuvable."));
-        long projet = (long) spec.get("projet");
-        String espace = !"null".equals(spec.get("espace")) ? (String) spec.get("espace")
-                : espaceDemande == null ? "" : cle(espaceDemande);
+        PourPublication spec = specs.pourPublication(specId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Spec introuvable."));
+        String espace = spec.espace() != null ? spec.espace() : espaceDemande == null ? "" : cle(espaceDemande);
         if (espace.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Clé de l'espace Confluence obligatoire.");
         }
-        String titre = "Spec — " + spec.get("nom");
-        Body corps = corps(Adf.document(sansTitre((String) spec.get("contenu"))));
-        String message = "Spec version " + spec.get("version") + " (productDesigner)";
+        String titre = "Spec — " + spec.nom();
+        Body corps = corps(Adf.document(sansTitre(spec.contenu())));
+        String message = "Spec version " + spec.version() + " (productDesigner)";
 
-        String pageId = (String) spec.get("page");
-        var existante = "null".equals(pageId) ? Optional.<Page>empty() : page(pageId);
+        String pageId = spec.pageId();
+        var existante = pageId == null ? Optional.<Page>empty() : page(pageId);
         boolean creee = existante.isEmpty();
         Page page;
         try {
@@ -79,8 +77,8 @@ public class ConfluenceService {
                             + e.getResponseBodyAsString());
         }
         // Mémorisé après succès seulement : une mauvaise clé d'espace ne fige pas la cible.
-        jdbc.sql("UPDATE projet SET confluence_espace = ?, confluence_page_id = ? WHERE id = ?").params(espace, page.id(), projet).update();
-        jdbc.sql("UPDATE spec SET confluence_version = ? WHERE id = ?").params(page.version(), specId).update();
+        projets.memoriserConfluence(spec.projetId(), espace, page.id());
+        specs.memoriserConfluence(specId, page.version());
         return new Publication(espace, page.url(), page.version(), creee);
     }
 

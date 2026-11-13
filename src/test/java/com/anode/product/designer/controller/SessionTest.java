@@ -1,5 +1,6 @@
 package com.anode.product.designer.controller;
 
+import com.anode.product.designer.service.SessionService;
 import com.anode.product.designer.service.Record;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -554,7 +555,7 @@ class SessionTest {
     }
 
     @Autowired
-    SessionController sessions;
+    SessionService sessions;
 
     @Autowired
     JdbcClient jdbc;
@@ -580,7 +581,7 @@ class SessionTest {
         assertThat(send("POST", "/api/sessions/" + id + "/relancer", null)).contains("\"tache\":\"en_cours\"");
         assertThat(attendreFin(id)).contains("\"tache\":\"terminee\"");
         // Repart de zéro : seule la consigne, sans les messages de la tentative ratée.
-        assertThat(requetes.getFirst()).contains(SessionController.RESEARCH).doesNotContain("ENC-SECRET-123", "Encore une pause");
+        assertThat(requetes.getFirst()).contains(SessionService.RESEARCH).doesNotContain("ENC-SECRET-123", "Encore une pause");
         assertThat(send("POST", "/api/sessions/" + id + "/relancer", null)).contains("Seule une research en échec");
         assertThat(jdbc.sql("SELECT count(*) FROM artefact WHERE session_id = ?").param(id).query(Integer.class).single()).isEqualTo(1);
     }

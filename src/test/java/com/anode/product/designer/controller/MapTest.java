@@ -1,5 +1,6 @@
 package com.anode.product.designer.controller;
 
+import com.anode.product.designer.service.MapService;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.net.URI;
@@ -113,7 +114,7 @@ class MapTest {
     }
 
     @Autowired
-    MapController maps;
+    MapService maps;
 
     @Test
     void bloquanteHorsPerimetreLeveLeBlocageEtCyclesRefuses() throws Exception {

@@ -1,5 +1,6 @@
 package com.anode.product.designer.service;
 
+import lombok.RequiredArgsConstructor;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -13,13 +14,14 @@ import com.anode.atlassian.jira.JiraClient.BulkIssues;
 import com.anode.atlassian.jira.JiraClient.IssueFields;
 import com.anode.atlassian.jira.JiraClient.IssueLink;
 import com.anode.atlassian.jira.JiraClient.Search;
+import com.anode.product.designer.repository.RoadmapRepository;
+import com.anode.product.designer.repository.RoadmapRepository.Lien;
 import com.anode.product.designer.service.RoadmapService.Jalon;
 import com.anode.product.designer.service.RoadmapService.Roadmap;
 import com.anode.product.designer.service.RoadmapService.Ticket;
 
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpStatus;
-import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.server.ResponseStatusException;
@@ -29,6 +31,7 @@ import org.springframework.web.server.ResponseStatusException;
  * Idempotent : seuls les éléments sans `jira_key` sont créés, donc relancer l'export rejoue uniquement les échecs.
  */
 @Service
+@RequiredArgsConstructor
 public class JiraService {
 
     private static final int LOT = 50;
@@ -47,19 +50,10 @@ public class JiraService {
     /** Résultat d'un bulk create : clé par élément envoyé (null si échec) et erreurs par index. */
     record Bulk(List<String> cles, Map<Integer, String> erreurs) {}
 
-    private record Lien(long ticketId, long parId, String cle, String parCle) {}
-
-    private final JdbcClient jdbc;
+    private final RoadmapRepository repository;
     private final RoadmapService roadmaps;
     private final ObjectProvider<JiraClient> jira;
     private final Atlassian atlassian;
-
-    public JiraService(JdbcClient jdbc, RoadmapService roadmaps, ObjectProvider<JiraClient> jira, Atlassian atlassian) {
-        this.jdbc = jdbc;
-        this.roadmaps = roadmaps;
-        this.jira = jira;
-        this.atlassian = atlassian;
-    }
 
     public boolean configure() {
         return jira.getIfAvailable() != null;
@@ -80,11 +74,8 @@ public class JiraService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Clé du projet Jira obligatoire.");
         }
         Types types = types(projet);
-        Set<Long> jalonsIncertains = Set.copyOf(jdbc.sql("SELECT id FROM jalon WHERE spec_id = ? AND jira_incertain = 1")
-                .param(specId).query(Long.class).list());
-        Set<Long> ticketsIncertains = Set.copyOf(jdbc.sql(
-                        "SELECT t.id FROM ticket t JOIN jalon j ON j.id = t.jalon_id WHERE j.spec_id = ? AND t.jira_incertain = 1")
-                .param(specId).query(Long.class).list());
+        Set<Long> jalonsIncertains = repository.jalonsIncertains(specId);
+        Set<Long> ticketsIncertains = repository.ticketsIncertains(specId);
 
         List<Echec> echecs = new ArrayList<>();
         int epics = 0, misesAJour = 0, recuperes = 0;
@@ -94,7 +85,7 @@ public class JiraService {
             if (cle == null && jalonsIncertains.contains(j.id())) {
                 cle = chercher(projet, types.epic(), j.titre(), null).orElse(null);
                 if (cle != null) {
-                    jdbc.sql("UPDATE jalon SET jira_key = ?, jira_incertain = 0 WHERE id = ?").params(cle, j.id()).update();
+                    repository.majCleJalon(j.id(), cle);
                     recuperes++;
                 }
             }
@@ -104,12 +95,12 @@ public class JiraService {
                 try {
                     var champs = new IssueFields(champs(projet, types.epic(), j.titre(), null, null));
                     cle = atlassian.appel(() -> jira().createIssue(champs)).key();
-                    jdbc.sql("UPDATE jalon SET jira_key = ?, jira_incertain = 0 WHERE id = ?").params(cle, j.id()).update();
+                    repository.majCleJalon(j.id(), cle);
                     epics++;
                 } catch (ResponseStatusException e) {
                     throw e;
                 } catch (RuntimeException e) {
-                    jdbc.sql("UPDATE jalon SET jira_incertain = ? WHERE id = ?").params(Atlassian.incertain(e), j.id()).update();
+                    repository.majIncertainJalon(j.id(), Atlassian.incertain(e));
                     echecs.add(new Echec("Jalon « " + j.titre() + " »", e.getMessage()));
                     continue;
                 }
@@ -118,7 +109,7 @@ public class JiraService {
         }
         // Projet mémorisé seulement une fois quelque chose créé ou retrouvé : une mauvaise clé ne fige pas la cible.
         if (roadmap.jiraProjet() == null && !epicDuJalon.isEmpty()) {
-            jdbc.sql("UPDATE spec SET jira_projet = ? WHERE id = ?").params(projet, specId).update();
+            repository.memoriserProjetJira(specId, projet);
         }
 
         List<Ticket> aCreer = new ArrayList<>();
@@ -130,7 +121,7 @@ public class JiraService {
                 if (cle == null && epic != null && ticketsIncertains.contains(t.id())) {
                     cle = chercher(projet, types.story(), t.titre(), epic).orElse(null);
                     if (cle != null) {
-                        jdbc.sql("UPDATE ticket SET jira_key = ?, jira_incertain = 0 WHERE id = ?").params(cle, t.id()).update();
+                        repository.majCleTicket(t.id(), cle);
                         recuperes++;
                     }
                 }
@@ -162,7 +153,7 @@ public class JiraService {
             } catch (RuntimeException e) {
                 // Lot entier en échec : chaque Ticket est signalé ; marqué incertain si Jira a pu le créer quand même.
                 for (Ticket t : aCreer.subList(debut, fin)) {
-                    jdbc.sql("UPDATE ticket SET jira_incertain = ? WHERE id = ?").params(Atlassian.incertain(e), t.id()).update();
+                    repository.majIncertainTicket(t.id(), Atlassian.incertain(e));
                     echecs.add(new Echec(t.titre(), e.getMessage()));
                 }
                 continue;
@@ -171,25 +162,20 @@ public class JiraService {
                 Ticket t = aCreer.get(debut + i);
                 String cle = bulk.cles().get(i);
                 if (cle == null) {
-                    jdbc.sql("UPDATE ticket SET jira_incertain = 0 WHERE id = ?").param(t.id()).update();
+                    repository.majIncertainTicket(t.id(), false);
                     echecs.add(new Echec(t.titre(), bulk.erreurs().getOrDefault(i, "Échec sans détail.")));
                 } else {
-                    jdbc.sql("UPDATE ticket SET jira_key = ?, jira_incertain = 0 WHERE id = ?").params(cle, t.id()).update();
+                    repository.majCleTicket(t.id(), cle);
                     stories++;
                 }
             }
         }
 
         int liens = 0;
-        for (Lien l : jdbc.sql("""
-                        SELECT tb.ticket_id, tb.bloque_par_id AS par_id, t.jira_key AS cle, par.jira_key AS par_cle
-                        FROM ticket_bloque tb JOIN ticket t ON t.id = tb.ticket_id JOIN ticket par ON par.id = tb.bloque_par_id
-                        JOIN jalon j ON j.id = t.jalon_id
-                        WHERE j.spec_id = ? AND tb.jira_lie = 0 AND t.jira_key IS NOT NULL AND par.jira_key IS NOT NULL""")
-                .param(specId).query(Lien.class).list()) {
+        for (Lien l : repository.liensANouer(specId)) {
             try {
                 atlassian.appel(() -> jira().linkIssues(IssueLink.blocks(l.parCle(), l.cle())));
-                jdbc.sql("UPDATE ticket_bloque SET jira_lie = 1 WHERE ticket_id = ? AND bloque_par_id = ?").params(l.ticketId(), l.parId()).update();
+                repository.marquerLie(l.ticketId(), l.parId());
                 liens++;
             } catch (ResponseStatusException e) {
                 throw e;
@@ -197,8 +183,7 @@ public class JiraService {
                 echecs.add(new Echec("Lien " + l.parCle() + " bloque " + l.cle(), e.getMessage()));
             }
         }
-        List<String> orphelines = jdbc.sql("SELECT cle || ' (' || titre || ')' FROM jira_orphelin WHERE spec_id = ? ORDER BY id")
-                .param(specId).query(String.class).list();
+        List<String> orphelines = repository.orphelines(specId);
         return new Resultat(projet, epics, stories, liens, misesAJour, recuperes, echecs, orphelines);
     }
 

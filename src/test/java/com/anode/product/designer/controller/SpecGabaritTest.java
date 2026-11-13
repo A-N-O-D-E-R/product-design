@@ -1,5 +1,6 @@
 package com.anode.product.designer.controller;
 
+import com.anode.product.designer.service.SpecService;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.Set;
@@ -38,9 +39,9 @@ class SpecGabaritTest {
 
     @Test
     void socleCompletDansLOrdrePuisOptionnelles() {
-        String spec = SpecController.normaliser(BRUT);
+        String spec = SpecService.normaliser(BRUT);
         int precedent = -1;
-        for (String titre : SpecController.SOCLE) {
+        for (String titre : SpecService.SOCLE) {
             int i = spec.indexOf("## " + titre);
             assertThat(i).as(titre).isGreaterThan(precedent);
             precedent = i;
@@ -53,7 +54,7 @@ class SpecGabaritTest {
 
     @Test
     void exigencesSansDecisionExistanteSignalees() {
-        var avertissements = SpecController.verifier(SpecController.normaliser(BRUT), Set.of(1, 2));
+        var avertissements = SpecService.verifier(SpecService.normaliser(BRUT), Set.of(1, 2));
         assertThat(avertissements).containsExactly(
                 "E-2 ne cite aucune Décision existante (D-9 inconnue(s)).",
                 "E-4 cite D-8, inconnue(s).",
@@ -62,7 +63,7 @@ class SpecGabaritTest {
 
     @Test
     void sectionDuSocleReconnueParSonNumeroExact() {
-        String spec = SpecController.normaliser("# S\n\n## 10. Annexes\nA\n\n## 1. Problème\nP\n");
+        String spec = SpecService.normaliser("# S\n\n## 10. Annexes\nA\n\n## 1. Problème\nP\n");
         assertThat(spec).contains("## 1. Problème et Destination\n\nP", "## 10. Annexes\n\nA");
     }
 }

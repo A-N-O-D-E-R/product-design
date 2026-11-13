@@ -1,5 +1,6 @@
 package com.anode.product.designer.controller;
 
+import com.anode.product.designer.service.RoadmapService;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.net.InetSocketAddress;
@@ -25,9 +26,9 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
-import com.anode.product.designer.controller.RoadmapController.JalonGenere;
-import com.anode.product.designer.controller.RoadmapController.RoadmapGeneree;
-import com.anode.product.designer.controller.RoadmapController.TicketGenere;
+import com.anode.product.designer.service.RoadmapService.JalonGenere;
+import com.anode.product.designer.service.RoadmapService.RoadmapGeneree;
+import com.anode.product.designer.service.RoadmapService.TicketGenere;
 
 /** Token scopé : avec un cloud-id, Jira et Confluence passent par la passerelle api.atlassian.com/ex/{produit}/{cloudId}. */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -87,7 +88,7 @@ class PasserelleAtlassianTest {
     JdbcClient jdbc;
 
     @Autowired
-    RoadmapController roadmaps;
+    RoadmapService roadmaps;
 
     String post(String path, String json) throws Exception {
         return HttpClient.newHttpClient().send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))

@@ -125,6 +125,7 @@ Spring Boot 4.1, un seul jar, virtual threads
    ├─ JiraService          export Roadmap vers Jira v3 (bulk, ADF), via atlassian-springboot-starter
    ├─ ConfluenceService    publication de la Spec dans Confluence v2 (pages en ADF, versions)
    ├─ Atlassian            config absente, 401, reprises sur 429 (Retry-After) pour les deux
+   ├─ controller ─▶ service ─▶ repository   (une zone = un trio ; seuls les repositories écrivent du SQL)
    └─ JdbcClient + Flyway ─▶ SQLite (une connexion)
 ```
 
@@ -136,9 +137,9 @@ Spring Boot 4.1, un seul jar, virtual threads
 
 | Chemin | Contenu |
 |---|---|
-| `src/main/java/productdesigner/` | Backend : un contrôleur par zone (Projet, Session, Map, Décision, Spec, Roadmap, Jira, Confluence) |
+| `src/main/java/com/anode/product/designer/` | Backend en 3 couches : `controller` (HTTP et SSE seulement), `service` (règles métier, LLM, Jira, Confluence, transactions), `repository` (tout le SQL, via `JdbcClient`). Une zone = un contrôleur, un service, un repository (Projet, Session, Map, Décision, Spec, Roadmap, Consommation) |
 | `src/main/resources/db/migration/` | Schéma SQLite (Flyway) |
-| `frontend/src/` | Pages et composants du front |
+| `frontend/src/` | Front en 3 couches comme le backend : `api/` (un module par zone : types + appels REST/SSE, via `client.ts`), `hooks/` (état et actions : `useSession`, `useProjet`, `useDecisions`), `pages/` et `components/` (affichage seulement) |
 | `.scratch/productdesigner-mvp/` | Map de conception, Questions résolues, Spec du MVP, prototype de l'écran de Session |
 | `.scratch/productdesigner-build/` | Roadmap et Tickets d'implémentation, avec notes de réalisation |
 | `docs/adr/` | Décisions d'architecture prises après la Spec du MVP |

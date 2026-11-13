@@ -3,11 +3,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Markdown } from '@/components/Markdown'
 import { RoadmapSection } from '@/components/RoadmapSection'
-import { api, postSse } from '@/lib/api'
-
-type Version = { id: number; version: number; createdAt: string }
-type Spec = Version & { contenu: string; confluenceVersion: number | null; confluenceEspace: string | null }
-type Publication = { espace: string; url: string; versionConfluence: number; creee: boolean }
+import { specs as api, type Publication, type Spec, type Version } from '@/api/specs'
 
 /** Spec du Projet : génération forcée streamée (E-19), versions consultables (E-22), avertissements de traçabilité (E-21). */
 export function SpecSection({ projetId, mapVide }: { projetId: number; mapVide: boolean }) {
@@ -21,10 +17,10 @@ export function SpecSection({ projetId, mapVide }: { projetId: number; mapVide: 
   const [publiant, setPubliant] = useState(false)
 
   function charger(id?: number) {
-    api<Version[]>(`/api/projets/${projetId}/specs`).then((v) => {
+    api.versions(projetId).then((v) => {
       setVersions(v)
       const cible = id ?? v[0]?.id
-      if (cible) api<Spec>(`/api/specs/${cible}`).then(setSpec)
+      if (cible) api.detail(cible).then(setSpec)
     })
   }
 
@@ -40,9 +36,9 @@ export function SpecSection({ projetId, mapVide }: { projetId: number; mapVide: 
     setErreur(undefined)
     setPubliant(true)
     try {
-      const p = await api<Publication>(`/api/specs/${spec.id}/export-confluence`, { method: 'POST', body: JSON.stringify({ espace }) })
+      const p = await api.publier(spec.id, espace)
       setPublication(p)
-      api<Spec>(`/api/specs/${spec.id}`).then(setSpec)
+      api.detail(spec.id).then(setSpec)
     } catch (e) {
       setErreur((e as Error).message)
     }
@@ -56,7 +52,7 @@ export function SpecSection({ projetId, mapVide }: { projetId: number; mapVide: 
     let texte = ''
     let id: number | undefined
     try {
-      await postSse(`/api/projets/${projetId}/specs`, undefined, (name, data) => {
+      await api.generer(projetId, (name, data) => {
         if (name === 'delta') setEnCours((texte += data.texte))
         if (name === 'fin') {
           id = data.id
@@ -80,7 +76,7 @@ export function SpecSection({ projetId, mapVide }: { projetId: number; mapVide: 
             aria-label="Version de la Spec"
             className="rounded-md border px-2 py-1 text-sm"
             value={spec?.id}
-            onChange={(e) => api<Spec>(`/api/specs/${e.target.value}`).then(setSpec)}
+            onChange={(e) => api.detail(Number(e.target.value)).then(setSpec)}
           >
             {versions.map((v) => <option key={v.id} value={v.id}>Version {v.version}</option>)}
           </select>
@@ -88,13 +84,13 @@ export function SpecSection({ projetId, mapVide }: { projetId: number; mapVide: 
         <Button size="sm" onClick={generer} disabled={enCours !== undefined}>Générer la Spec</Button>
       </div>
       {mapVide && enCours === undefined && (
-        <p role="status" className="rounded bg-emerald-50 px-2 py-1 text-sm text-emerald-950">
+        <p role="status" className="rounded bg-success/15 px-2 py-1 text-sm text-foreground">
           La Map n'a plus de Question ouverte ni en cours : c'est le moment de générer la Spec.
         </p>
       )}
-      {erreur && <p role="alert" className="text-sm text-red-700">{erreur}</p>}
+      {erreur && <p role="alert" className="text-sm text-destructive">{erreur}</p>}
       {avertissements.length > 0 && (
-        <ul role="status" className="list-disc rounded bg-amber-50 py-1 pl-6 text-sm text-amber-950">
+        <ul role="status" className="list-disc rounded bg-warning/15 py-1 pl-6 text-sm text-foreground">
           {avertissements.map((a) => <li key={a}>{a}</li>)}
         </ul>
       )}
