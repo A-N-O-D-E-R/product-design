@@ -91,7 +91,7 @@ export function RoadmapSection({ specId }: { specId: number }) {
           {tickets.length > 0 ? 'Régénérer la Roadmap' : 'Générer la Roadmap'}
         </Button>
       </div>
-      {caracteres !== undefined && <p role="status" className="text-sm text-muted-foreground">Génération…{caracteres > 0 && ` ${caracteres} caractères reçus.`}</p>}
+      {caracteres !== undefined && <p role="status" className="text-sm text-muted-foreground">Génération… {caracteres} caractères reçus.</p>}
       {erreur && <p role="alert" className="text-sm text-red-700">{erreur}</p>}
       {avertissements.length > 0 && (
         <ul role="status" className="list-disc rounded bg-amber-50 py-1 pl-6 text-sm text-amber-950">
