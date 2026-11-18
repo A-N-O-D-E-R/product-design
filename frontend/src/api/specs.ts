@@ -1,8 +1,7 @@
 import { api, json, postSse, type OnEvent } from './client'
+import type { Publication, Spec, Version } from './types'
 
-export type Version = { id: number; version: number; createdAt: string }
-export type Spec = Version & { contenu: string; confluenceVersion: number | null; confluenceEspace: string | null }
-export type Publication = { espace: string; url: string; versionConfluence: number; creee: boolean }
+export type { Publication, Spec, Version }
 
 export const specs = {
   versions: (projetId: number) => api<Version[]>(`/api/projets/${projetId}/specs`),

@@ -1,6 +1,7 @@
 import { api } from './client'
+import type { Total } from './types'
 
-export type Total = { inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheWriteTokens: number; cout: number | null }
+export type { Total }
 
 export const consommation = {
   session: (id: number) => api<Total>(`/api/sessions/${id}/consommation`),

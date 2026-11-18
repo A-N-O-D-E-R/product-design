@@ -1,16 +1,14 @@
-import { useEffect, useState } from 'react'
-import { consommation, type Total } from '@/api/consommation'
+import { useQuery } from '@tanstack/react-query'
+import { queries } from '@/api/query'
 
 const nombre = new Intl.NumberFormat('fr-FR')
 const dollars = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'USD', maximumFractionDigits: 4 })
 
 /** Tokens et coût estimé (D-29) ; `version` force le rechargement après un échange. */
 export function ConsommationLigne({ sessionId, projetId, version = 0 }: { sessionId?: number; projetId?: number; version?: number }) {
-  const [total, setTotal] = useState<Total>()
-  useEffect(() => {
-    const requete = sessionId !== undefined ? consommation.session(sessionId) : consommation.projet(projetId!)
-    requete.then(setTotal)
-  }, [sessionId, projetId, version])
+  const requete = sessionId !== undefined ? queries.consommationSession(sessionId) : queries.consommationProjet(projetId!)
+  // `version` change après un échange : la clé aussi, donc la consommation est relue
+  const { data: total } = useQuery({ ...requete, queryKey: [...requete.queryKey, version] })
   if (!total) return null
   const tokens = total.inputTokens + total.outputTokens + total.cacheReadTokens + total.cacheWriteTokens
   return (

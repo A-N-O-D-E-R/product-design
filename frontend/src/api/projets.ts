@@ -1,8 +1,7 @@
 import { api, json } from './client'
+import type { Projet, ProjetCree } from './types'
 
-export type Projet = { id: number; nom: string; description: string; createdAt: string }
-/** sessionTraceId : la 1re Session trace la Map (D-6). */
-export type ProjetCree = Projet & { sessionTraceId: number }
+export type { Projet, ProjetCree }
 
 export const projets = {
   lister: () => api<Projet[]>('/api/projets'),

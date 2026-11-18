@@ -1,23 +1,7 @@
 import { api, json, postSse, type OnEvent } from './client'
+import type { Affichage, Artefact, Contexte, QuestionRound, Round, Session, SessionDetail } from './types'
 
-export type Session = {
-  id: number
-  projetId: number
-  methode: string
-  statut: string
-  createdAt: string
-  questionId: number | null
-  question: string | null
-  continuedFrom: number | null
-  tache: 'en_cours' | 'terminee' | 'echec' | null
-  progression: string | null
-}
-export type Artefact = { id: number; type: 'research_md' | 'prototype_html'; contenu: string; createdAt: string }
-export type QuestionRound = { id: string; titre: string; corps: string; recommandation?: string }
-export type Round = { questions: QuestionRound[] }
-export type Affichage = { id: number; role: 'user' | 'assistant'; texte: string; round?: Round | null; incomplet?: boolean }
-export type SessionDetail = { session: Session; projet: string; messages: Affichage[]; reessayable: boolean }
-export type Contexte = { tokens: number; fenetre: number; remplissage: number; seuilAtteint: boolean }
+export type { Affichage, Artefact, Contexte, QuestionRound, Round, Session, SessionDetail }
 
 export const sessions = {
   lister: (projetId: number) => api<Session[]>(`/api/projets/${projetId}/sessions`),

@@ -1,8 +1,7 @@
 import { api, json } from './client'
+import type { Decision, PanneauDecisions, Proposee } from './types'
 
-export type Proposee = { messageId: number; indice: number; texte: string }
-export type Decision = { id: number; numero: number; texte: string; sessionId: number; confirmedAt: string }
-export type PanneauDecisions = { proposees: Proposee[]; decisions: Decision[] }
+export type { Decision, PanneauDecisions, Proposee }
 
 export const decisions = {
   panneau: (sessionId: number) => api<PanneauDecisions>(`/api/sessions/${sessionId}/decisions`),

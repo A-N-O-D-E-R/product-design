@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { Link, useLocation } from '@tanstack/react-router'
 import { FolderKanban, LayoutGrid } from 'lucide-react'
-import { projets as api, type Projet } from '@/api/projets'
+import { queries } from '@/api/query'
 import type { Status } from '@/api/status'
 import {
   Sidebar,
@@ -31,13 +31,9 @@ export function AppSidebar({ status, onMouseEnter, onMouseLeave }: {
   onMouseEnter?: React.MouseEventHandler<HTMLDivElement>
   onMouseLeave?: React.MouseEventHandler<HTMLDivElement>
 }) {
-  const [projets, setProjets] = useState<Projet[]>([])
   const { pathname } = useLocation()
-
-  // Rechargé à chaque navigation : un Projet créé apparaît tout de suite.
-  useEffect(() => {
-    api.lister().then(setProjets, () => setProjets([]))
-  }, [pathname])
+  // La création d'un Projet invalide cette liste : il apparaît tout de suite.
+  const { data: projets = [] } = useQuery(queries.projets())
 
   const lien = 'flex w-full items-center gap-2 text-white hover:text-white data-active:text-white'
   const bouton = 'hover:bg-white/10 data-active:bg-white/30 data-active:font-semibold'
