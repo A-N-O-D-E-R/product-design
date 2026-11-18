@@ -153,7 +153,7 @@ changement d'API fait échouer le test ; relire le diff puis régénérer avec `
 
 ```sh
 JAVA_HOME=~/.sdkman/candidates/java/25.0.2-oracle mvn package
-java -jar target/productdesigner-0.2.0.jar   # avec SPRING_DATASOURCE_URL/USERNAME/PASSWORD et SPRING_DOCKER_COMPOSE_ENABLED=false
+java -jar target/productdesigner-0.3.0.jar   # avec SPRING_DATASOURCE_URL/USERNAME/PASSWORD et SPRING_DOCKER_COMPOSE_ENABLED=false
 ```
 
 Puis http://localhost:8080. Le jar contient le front ; les migrations Flyway s'appliquent au premier lancement sur la base Postgres indiquée.

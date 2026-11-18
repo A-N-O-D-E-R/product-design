@@ -3,7 +3,9 @@ import { consommation } from './consommation'
 import { decisions } from './decisions'
 import { map } from './map'
 import { projets } from './projets'
+import { roadmap } from './roadmap'
 import { sessions } from './sessions'
+import { specs } from './specs'
 import { status } from './status'
 
 export const newQueryClient = () =>
@@ -17,6 +19,10 @@ export const queries = {
   sessions: (projetId: number) => ({ queryKey: ['projets', projetId, 'sessions'] as const, queryFn: () => sessions.lister(projetId) }),
   carte: (projetId: number) => ({ queryKey: ['projets', projetId, 'carte'] as const, queryFn: () => map.carte(projetId) }),
   panneau: (sessionId: number) => ({ queryKey: ['sessions', sessionId, 'decisions'] as const, queryFn: () => decisions.panneau(sessionId) }),
+  specs: (projetId: number) => ({ queryKey: ['projets', projetId, 'specs'] as const, queryFn: () => specs.versions(projetId) }),
+  spec: (id: number) => ({ queryKey: ['specs', id] as const, queryFn: () => specs.detail(id) }),
+  roadmap: (specId: number) => ({ queryKey: ['specs', specId, 'roadmap'] as const, queryFn: () => roadmap.lire(specId) }),
+  jiraStatus: () => ({ queryKey: ['jira', 'status'] as const, queryFn: roadmap.jiraStatus }),
   consommationSession: (id: number) => ({ queryKey: ['sessions', id, 'consommation'] as const, queryFn: () => consommation.session(id) }),
   consommationProjet: (id: number) => ({ queryKey: ['projets', id, 'consommation'] as const, queryFn: () => consommation.projet(id) }),
 }

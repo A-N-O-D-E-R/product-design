@@ -1,14 +1,22 @@
 import { useEffect, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { queries } from '@/api/query'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Markdown } from '@/components/Markdown'
 import { RoadmapSection } from '@/components/RoadmapSection'
-import { specs as api, type Publication, type Spec, type Version } from '@/api/specs'
+import { specs as api, type Publication } from '@/api/specs'
 
 /** Spec du Projet : génération forcée streamée (E-19), versions consultables (E-22), avertissements de traçabilité (E-21). */
 export function SpecSection({ projetId, mapVide }: { projetId: number; mapVide: boolean }) {
-  const [versions, setVersions] = useState<Version[]>([])
-  const [spec, setSpec] = useState<Spec>()
+  const client = useQueryClient()
+  const { data: versions = [] } = useQuery(queries.specs(projetId))
+  // la version choisie dans la liste ; à défaut, la plus récente
+  const [choix, setChoix] = useState<{ projetId: number; id: number }>()
+  const choisie = choix?.projetId === projetId ? choix.id : undefined
+  const setChoisie = (id: number) => setChoix({ projetId, id })
+  const cible = choisie ?? versions[0]?.id
+  const { data: spec } = useQuery({ ...queries.spec(cible ?? 0), enabled: cible !== undefined })
   const [enCours, setEnCours] = useState<string>()
   const [avertissements, setAvertissements] = useState<string[]>([])
   const [erreur, setErreur] = useState<string>()
@@ -16,15 +24,6 @@ export function SpecSection({ projetId, mapVide }: { projetId: number; mapVide: 
   const [publication, setPublication] = useState<Publication>()
   const [publiant, setPubliant] = useState(false)
 
-  function charger(id?: number) {
-    api.versions(projetId).then((v) => {
-      setVersions(v)
-      const cible = id ?? v[0]?.id
-      if (cible) api.detail(cible).then(setSpec)
-    })
-  }
-
-  useEffect(() => charger(), [projetId])
   useEffect(() => {
     setPublication(undefined)
     if (spec?.confluenceEspace) setEspace(spec.confluenceEspace)
@@ -38,7 +37,7 @@ export function SpecSection({ projetId, mapVide }: { projetId: number; mapVide: 
     try {
       const p = await api.publier(spec.id, espace)
       setPublication(p)
-      api.detail(spec.id).then(setSpec)
+      await client.invalidateQueries({ queryKey: queries.spec(spec.id).queryKey })
     } catch (e) {
       setErreur((e as Error).message)
     }
@@ -64,7 +63,8 @@ export function SpecSection({ projetId, mapVide }: { projetId: number; mapVide: 
       setErreur((e as Error).message)
     }
     setEnCours(undefined)
-    if (id) charger(id)
+    await client.invalidateQueries({ queryKey: queries.specs(projetId).queryKey })
+    if (id) setChoisie(id)
   }
 
   return (
@@ -76,7 +76,7 @@ export function SpecSection({ projetId, mapVide }: { projetId: number; mapVide: 
             aria-label="Version de la Spec"
             className="rounded-md border px-2 py-1 text-sm"
             value={spec?.id}
-            onChange={(e) => api.detail(Number(e.target.value)).then(setSpec)}
+            onChange={(e) => setChoisie(Number(e.target.value))}
           >
             {versions.map((v) => <option key={v.id} value={v.id}>Version {v.version}</option>)}
           </select>
