@@ -1,24 +1,7 @@
 import { api, json } from './client'
+import type { Carte, Ligne, QuestionEditee, QuestionMap } from './types'
 
-export type QuestionMap = {
-  id: number
-  numero: number
-  titre: string
-  corps: string
-  type: 'grilling' | 'research' | 'prototype' | 'tache'
-  statut: 'open' | 'claimed' | 'resolved' | 'hors_perimetre'
-  blockedBy: number[]
-  ouvrable: boolean
-}
-export type Ligne = { id: number; texte: string }
-export type Carte = {
-  destination: string
-  notes: string
-  questions: QuestionMap[]
-  brouillard: Ligne[]
-  horsPerimetre: Ligne[]
-}
-export type QuestionEditee = { titre: string; corps: string; type: string; blockedBy: number[] }
+export type { Carte, Ligne, QuestionEditee, QuestionMap }
 export type Liste = 'brouillard' | 'hors-perimetre'
 
 const base = (projetId: number) => `/api/projets/${projetId}`

@@ -1,18 +1,7 @@
 import { api, json, postSse, type OnEvent } from './client'
+import type { ExportJira, Jalon, Roadmap, Ticket, TicketEdite } from './types'
 
-export type Ticket = { id: number; ordre: number; titre: string; corps: string; exigences: string[]; blockedBy: number[]; jiraKey: string | null }
-export type Jalon = { id: number; ordre: number; titre: string; jiraKey: string | null; tickets: Ticket[] }
-export type Roadmap = { specId: number; version: number; jiraProjet: string | null; jalons: Jalon[] }
-export type ExportJira = {
-  projet: string
-  epicsCrees: number
-  storiesCreees: number
-  liensCrees: number
-  misesAJour: number
-  echecs: { titre: string; erreur: string }[]
-  orphelines: string[]
-}
-export type TicketEdite = { jalonId: number; titre: string; corps: string; exigences: string[]; blockedBy: number[] }
+export type { ExportJira, Jalon, Roadmap, Ticket, TicketEdite }
 export type JiraStatus = { configure: boolean; message?: string }
 
 /** Chaque écriture renvoie la Roadmap à jour. */

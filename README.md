@@ -158,7 +158,7 @@ java -jar target/productdesigner-0.2.0.jar   # avec SPRING_DATASOURCE_URL/USERNA
 
 Puis http://localhost:8080. Le jar contient le front ; les migrations Flyway s'appliquent au premier lancement sur la base Postgres indiquée.
 
-**Développement** : `mvn spring-boot:run` pour le backend (port 8080) et `pnpm dev` dans `frontend/` (le serveur Vite relaie `/api`).
+**Développement** : `mvn spring-boot:run` pour le backend (port 8080) et `pnpm dev` dans `frontend/` (le serveur Vite relaie `/api`). Dans `frontend/` : `pnpm lint`, `pnpm test` (vitest), `pnpm build`. Après tout changement de contrat REST : `UPDATE_OPENAPI=1 mvn test -Dtest=OpenApiTest` puis `pnpm api:types` (régénère `src/api/schema.d.ts`) ; un test échoue si les deux divergent.
 
 **Tests** : `mvn test` (ajouter `-Dskip.pnpm -Dskip.installnodepnpm` pour ne pas rebuilder le front). Ils tournent contre de faux serveurs (Anthropic, OpenAI, Tavily, Jira, Confluence), sans appel réseau, et contre un vrai Postgres (Testcontainers, Docker requis).
 

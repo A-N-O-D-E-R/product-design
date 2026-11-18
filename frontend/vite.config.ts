@@ -1,7 +1,7 @@
 import path from 'node:path'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
-import { defineConfig } from 'vite'
+import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
@@ -9,5 +9,6 @@ export default defineConfig({
   // /api et la connexion (page de login, OIDC, déconnexion) sont servis par Spring Security
   server: { proxy: Object.fromEntries(['/api', '/login', '/logout', '/oauth2'].map((p) => [p, 'http://localhost:8080'])) },
   // Le jar sert le build depuis classpath:/static.
+  test: { environment: 'jsdom', setupFiles: ['./src/test-setup.ts'], include: ['src/**/*.test.{ts,tsx}'] },
   build: { outDir: '../target/classes/static', emptyOutDir: true },
 })

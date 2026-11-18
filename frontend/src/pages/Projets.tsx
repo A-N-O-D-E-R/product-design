@@ -1,4 +1,6 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useState, type FormEvent } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { queries } from '@/api/query'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -7,16 +9,12 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { projets as api, type Projet } from '@/api/projets'
+import { projets as api } from '@/api/projets'
 
 /** Accueil : les Projets en cartes, et une carte en pointillés qui ouvre le formulaire de création. */
 export function Projets() {
-  const [projets, setProjets] = useState<Projet[]>([])
+  const { data: projets = [] } = useQuery(queries.projets())
   const [ouvert, setOuvert] = useState(false)
-
-  useEffect(() => {
-    api.lister().then(setProjets)
-  }, [])
 
   return (
     <div className="mx-auto grid max-w-5xl gap-4">
@@ -52,12 +50,14 @@ function NouveauProjet({ ouvert, onOuvert }: { ouvert: boolean; onOuvert: (o: bo
   const [description, setDescription] = useState('')
   const [erreur, setErreur] = useState<string>()
   const navigate = useNavigate()
+  const client = useQueryClient()
 
   async function creer(e: FormEvent) {
     e.preventDefault()
     try {
       // La 1re Session trace la Map (D-6).
       const projet = await api.creer(nom, description)
+      await client.invalidateQueries({ queryKey: queries.projets().queryKey })
       navigate({ to: '/sessions/$id', params: { id: String(projet.sessionTraceId) } })
     } catch {
       setErreur('Création impossible : le nom est obligatoire.')

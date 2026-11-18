@@ -1,20 +1,53 @@
+import ky from 'ky'
+
 /** Requête JSON : corps sérialisé seulement s'il y en a un. */
-export const json = (method: string, body?: unknown): RequestInit => ({
+export const json = (method: string, body?: unknown): { method: string; body?: string } => ({
   method,
   body: body === undefined ? undefined : JSON.stringify(body),
 })
 
 /** Jeton CSRF du cookie XSRF-TOKEN, à renvoyer dans X-XSRF-TOKEN sur les écritures (Spring Security, mode SPA). */
-function jetonCsrf(): Record<string, string> {
+export function jetonCsrf(): string | undefined {
   const jeton = document.cookie.split('; ').find((c) => c.startsWith('XSRF-TOKEN='))?.slice('XSRF-TOKEN='.length)
-  return jeton ? { 'X-XSRF-TOKEN': decodeURIComponent(jeton) } : {}
+  return jeton ? decodeURIComponent(jeton) : undefined
+}
+
+/**
+ * Le client HTTP : cookies de session, jeton CSRF sur les écritures. Pas de délai ni de nouvel essai (une génération LLM dure des minutes,
+ * et une écriture rejouée ferait deux fois l'effet) ; les statuts d'erreur sont traités ici, pas levés par ky.
+ */
+export const http = ky.create({
+  baseUrl: window.location.origin, // les chemins sont absolus (/api/...) : relatifs à l'origine de la page
+  credentials: 'include',
+  timeout: false,
+  retry: 0,
+  throwHttpErrors: false,
+  hooks: {
+    beforeRequest: [
+      ({ request }) => {
+        if (request.method === 'GET' || request.method === 'HEAD') return
+        const jeton = jetonCsrf()
+        if (jeton) request.headers.set('X-XSRF-TOKEN', jeton)
+      },
+    ],
+  },
+})
+
+/** Erreur d'API : le message est celui du serveur. */
+export class ApiError extends Error {
+  readonly status: number
+  constructor(message: string, status: number) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+  }
 }
 
 /** Pas connecté : retour à la page de login (le front statique est public, l'API répond 401). */
 function verifierConnexion(r: Response) {
   if (r.status === 401) {
     window.location.assign('/login')
-    throw new Error('Connexion requise.')
+    throw new ApiError('Connexion requise.', 401)
   }
 }
 
@@ -24,27 +57,23 @@ async function messageErreur(r: Response): Promise<string> {
   return corps?.detail ?? corps?.message ?? `Erreur ${r.status}`
 }
 
-export async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const r = await fetch(path, {
-    ...init,
-    headers: { 'Content-Type': 'application/json', ...jetonCsrf(), ...init?.headers },
-  })
+export async function api<T>(path: string, init?: { method?: string; body?: string }): Promise<T> {
+  const r = await http(path, { ...init, headers: { 'Content-Type': 'application/json' } })
   verifierConnexion(r)
-  if (!r.ok) throw new Error(await messageErreur(r))
-  return r.json()
+  if (!r.ok) throw new ApiError(await messageErreur(r), r.status)
+  return (await r.json()) as T
 }
 
 /** POST qui répond en SSE ; appelle `onEvent` pour chaque événement nommé. */
 export type OnEvent = (name: string, data: any) => void
 
 export async function postSse(path: string, body: unknown, onEvent: OnEvent) {
-  const r = await fetch(path, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream', ...jetonCsrf() },
+  const r = await http.post(path, {
+    headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
     body: JSON.stringify(body),
   })
   verifierConnexion(r)
-  if (!r.ok || !r.body) throw new Error(await messageErreur(r))
+  if (!r.ok || !r.body) throw new ApiError(await messageErreur(r), r.status)
   const reader = r.body.pipeThrough(new TextDecoderStream()).getReader()
   let tampon = ''
   for (;;) {

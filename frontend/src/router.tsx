@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { queries } from '@/api/query'
 import { createRootRoute, createRoute, createRouter, Outlet } from '@tanstack/react-router'
-import { status as chargerStatus, type Status } from '@/api/status'
 import { AppSidebar } from '@/components/layout/AppSidebar'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
 import { Projets } from '@/pages/Projets'
@@ -8,11 +9,8 @@ import { ProjetPage } from '@/pages/ProjetPage'
 import { SessionPage } from '@/pages/SessionPage'
 
 function Layout() {
-  const [status, setStatus] = useState<Status>()
+  const { data: status } = useQuery(queries.status())
   const [open, setOpen] = useState(false)
-  useEffect(() => {
-    chargerStatus().then(setStatus)
-  }, [])
   return (
     <SidebarProvider style={{ '--sidebar-width': '13rem' } as React.CSSProperties} open={open} onOpenChange={setOpen}>
       <AppSidebar status={status} onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)} />
