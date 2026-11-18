@@ -1,0 +1,1289 @@
+{
+  "openapi" : "3.1.0",
+  "info" : {
+    "title" : "OpenAPI definition",
+    "version" : "v0"
+  },
+  "paths" : {
+    "/v1/me/tenant-key" : {
+      "put" : {
+        "tags" : [ "me-api" ],
+        "operationId" : "setTenantKey",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/NewTenantKey"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        }
+      },
+      "delete" : {
+        "tags" : [ "me-api" ],
+        "operationId" : "deleteTenantKey",
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        }
+      }
+    },
+    "/v1/reviews" : {
+      "post" : {
+        "tags" : [ "api" ],
+        "operationId" : "review",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ReviewRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/JobView"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/me/api-keys" : {
+      "get" : {
+        "tags" : [ "me-api" ],
+        "operationId" : "apiKeys",
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/Key"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post" : {
+        "tags" : [ "me-api" ],
+        "operationId" : "createApiKey",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/NewApiKey"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "description" : "Created",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Created"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/jobs/{id}/resume" : {
+      "post" : {
+        "tags" : [ "api" ],
+        "operationId" : "resume",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/JobView"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/jobs/{id}/cancel" : {
+      "post" : {
+        "tags" : [ "api" ],
+        "operationId" : "cancel",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/JobView"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/ideations" : {
+      "post" : {
+        "tags" : [ "api" ],
+        "operationId" : "ideation",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/IdeationRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/JobView"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/experiment-runs" : {
+      "post" : {
+        "tags" : [ "api" ],
+        "operationId" : "experiment",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ExperimentRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/JobView"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/appeals" : {
+      "get" : {
+        "tags" : [ "abuse-api" ],
+        "operationId" : "appeals",
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/Appeal"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post" : {
+        "tags" : [ "abuse-api" ],
+        "operationId" : "appeal",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/NewAppeal"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Appeal"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/abuse-reports" : {
+      "post" : {
+        "tags" : [ "abuse-api" ],
+        "operationId" : "report",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/NewReport"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "object",
+                  "additionalProperties" : { }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/jobs/{id}" : {
+      "get" : {
+        "tags" : [ "api" ],
+        "operationId" : "job",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/JobView"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete" : {
+        "tags" : [ "api" ],
+        "operationId" : "delete",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        }
+      },
+      "patch" : {
+        "tags" : [ "api" ],
+        "operationId" : "setBudget",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/BudgetRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/JobView"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/me" : {
+      "get" : {
+        "tags" : [ "me-api" ],
+        "operationId" : "me",
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Me"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete" : {
+        "tags" : [ "me-api" ],
+        "operationId" : "deleteMe",
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        }
+      }
+    },
+    "/v1/me/usage" : {
+      "get" : {
+        "tags" : [ "me-api" ],
+        "operationId" : "usage",
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Usage"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/me/audit" : {
+      "get" : {
+        "tags" : [ "me-api" ],
+        "operationId" : "audit",
+        "parameters" : [ {
+          "name" : "before",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }, {
+          "name" : "limit",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "default" : 50,
+            "maximum" : 200,
+            "minimum" : 1
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/Event"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/jobs" : {
+      "get" : {
+        "tags" : [ "api" ],
+        "operationId" : "jobs",
+        "parameters" : [ {
+          "name" : "type",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "status",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "enum" : [ "QUEUED", "RUNNING", "PAUSED", "DONE", "FAILED", "CANCELLED", "REJECTED" ]
+          }
+        }, {
+          "name" : "cursor",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "limit",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "default" : 50,
+            "maximum" : 200,
+            "minimum" : 1
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PageJobView"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/jobs/{id}/nodes" : {
+      "get" : {
+        "tags" : [ "api" ],
+        "operationId" : "nodes",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "cursor",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }, {
+          "name" : "limit",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "default" : 50,
+            "maximum" : 200,
+            "minimum" : 1
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PageNodeSummary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/jobs/{id}/nodes/{node}" : {
+      "get" : {
+        "tags" : [ "api" ],
+        "operationId" : "node",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "node",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Node"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/jobs/{id}/files" : {
+      "get" : {
+        "tags" : [ "api" ],
+        "operationId" : "files",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "type" : "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/jobs/{id}/files/{path}" : {
+      "get" : {
+        "tags" : [ "api" ],
+        "operationId" : "file",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "path",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        }
+      }
+    },
+    "/v1/jobs/{id}/events" : {
+      "get" : {
+        "tags" : [ "api" ],
+        "operationId" : "events",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "Last-Event-ID",
+          "in" : "header",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "text/event-stream" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/SseEmitter"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/me/data" : {
+      "delete" : {
+        "tags" : [ "me-api" ],
+        "operationId" : "deleteData",
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        }
+      }
+    },
+    "/v1/me/api-keys/{id}" : {
+      "delete" : {
+        "tags" : [ "me-api" ],
+        "operationId" : "revokeApiKey",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "format" : "uuid"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK"
+          }
+        }
+      }
+    }
+  },
+  "components" : {
+    "schemas" : {
+      "NewTenantKey" : {
+        "type" : "object",
+        "properties" : {
+          "key" : {
+            "type" : "string",
+            "maxLength" : 500,
+            "minLength" : 0
+          }
+        },
+        "required" : [ "key" ]
+      },
+      "ReviewRequest" : {
+        "type" : "object",
+        "properties" : {
+          "paper" : {
+            "type" : "string",
+            "minLength" : 1
+          },
+          "budgetUsd" : {
+            "type" : "number",
+            "minimum" : 0.01
+          }
+        },
+        "required" : [ "paper" ]
+      },
+      "JobView" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string"
+          },
+          "type" : {
+            "type" : "string"
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "status" : {
+            "type" : "string",
+            "enum" : [ "QUEUED", "RUNNING", "PAUSED", "DONE", "FAILED", "CANCELLED", "REJECTED" ]
+          },
+          "pauseReason" : {
+            "type" : "string"
+          },
+          "phase" : {
+            "type" : "string"
+          },
+          "stage" : {
+            "type" : "string"
+          },
+          "result" : { },
+          "error" : {
+            "type" : "string"
+          },
+          "rejection" : { },
+          "budgetUsd" : {
+            "type" : "number"
+          },
+          "costUsdEstimate" : {
+            "type" : "number"
+          },
+          "tokens" : {
+            "$ref" : "#/components/schemas/Tokens"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "endedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "deleteAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "warnings" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          }
+        }
+      },
+      "Tokens" : {
+        "type" : "object",
+        "properties" : {
+          "input" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "output" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "cacheWrite" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "cacheRead" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }
+      },
+      "NewApiKey" : {
+        "type" : "object",
+        "properties" : {
+          "name" : {
+            "type" : "string",
+            "maxLength" : 100,
+            "minLength" : 0
+          },
+          "expiresInDays" : {
+            "type" : "integer",
+            "format" : "int32",
+            "maximum" : 365,
+            "minimum" : 1
+          }
+        },
+        "required" : [ "name" ]
+      },
+      "Created" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "key" : {
+            "type" : "string"
+          },
+          "expiresAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        }
+      },
+      "IdeationRequest" : {
+        "type" : "object",
+        "properties" : {
+          "topic" : {
+            "type" : "string",
+            "minLength" : 1
+          },
+          "maxGenerations" : {
+            "type" : "integer",
+            "format" : "int32",
+            "maximum" : 50,
+            "minimum" : 1
+          },
+          "numReflections" : {
+            "type" : "integer",
+            "format" : "int32",
+            "maximum" : 10,
+            "minimum" : 1
+          },
+          "budgetUsd" : {
+            "type" : "number",
+            "minimum" : 0.01
+          }
+        },
+        "required" : [ "topic" ]
+      },
+      "ExperimentRequest" : {
+        "type" : "object",
+        "properties" : {
+          "idea" : {
+            "$ref" : "#/components/schemas/Idea"
+          },
+          "skipWriteup" : {
+            "type" : "boolean"
+          },
+          "skipReview" : {
+            "type" : "boolean"
+          },
+          "budgetUsd" : {
+            "type" : "number",
+            "minimum" : 0.01
+          },
+          "parallel" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        },
+        "required" : [ "idea" ]
+      },
+      "Idea" : {
+        "type" : "object",
+        "properties" : {
+          "Name" : {
+            "type" : "string"
+          },
+          "Title" : {
+            "type" : "string"
+          },
+          "Short Hypothesis" : {
+            "type" : "string"
+          },
+          "Related Work" : {
+            "type" : "string"
+          },
+          "Abstract" : {
+            "type" : "string"
+          },
+          "Experiments" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          },
+          "Risk Factors and Limitations" : {
+            "type" : "string"
+          }
+        }
+      },
+      "NewAppeal" : {
+        "type" : "object",
+        "properties" : {
+          "jobId" : {
+            "type" : "string"
+          },
+          "text" : {
+            "type" : "string",
+            "maxLength" : 5000,
+            "minLength" : 0
+          }
+        },
+        "required" : [ "text" ]
+      },
+      "Appeal" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "jobId" : {
+            "type" : "string"
+          },
+          "text" : {
+            "type" : "string"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "decision" : {
+            "type" : "string"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "decidedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        }
+      },
+      "NewReport" : {
+        "type" : "object",
+        "properties" : {
+          "jobId" : {
+            "type" : "string"
+          },
+          "description" : {
+            "type" : "string",
+            "maxLength" : 10000,
+            "minLength" : 0
+          },
+          "contact" : {
+            "type" : "string",
+            "maxLength" : 300,
+            "minLength" : 0
+          }
+        },
+        "required" : [ "description" ]
+      },
+      "BudgetRequest" : {
+        "type" : "object",
+        "properties" : {
+          "budgetUsd" : {
+            "type" : "number",
+            "minimum" : 0.01
+          }
+        },
+        "required" : [ "budgetUsd" ]
+      },
+      "Identity" : {
+        "type" : "object",
+        "properties" : {
+          "provider" : {
+            "type" : "string"
+          },
+          "subject" : {
+            "type" : "string"
+          },
+          "email" : {
+            "type" : "string"
+          }
+        }
+      },
+      "Me" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "email" : {
+            "type" : "string"
+          },
+          "identities" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/Identity"
+            }
+          },
+          "tenantKeyUpdatedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "suspended" : {
+            "type" : "string"
+          },
+          "warnings" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          }
+        }
+      },
+      "QueuedJob" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string"
+          },
+          "position" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }
+      },
+      "Usage" : {
+        "type" : "object",
+        "properties" : {
+          "month" : {
+            "type" : "string"
+          },
+          "vcpuHoursUsed" : {
+            "type" : "number"
+          },
+          "vcpuHoursLimit" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "resetAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "storageBytes" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "storageLimitBytes" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "runningExperiments" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "queued" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "queuedLimit" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "submissionsToday" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "submissionsPerDay" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "queue" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/QueuedJob"
+            }
+          },
+          "warnings" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          }
+        }
+      },
+      "Event" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "actor" : {
+            "type" : "string"
+          },
+          "action" : {
+            "type" : "string"
+          },
+          "detail" : { },
+          "at" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        }
+      },
+      "Key" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "format" : "uuid"
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "hint" : {
+            "type" : "string"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "expiresAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "lastUsedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        }
+      },
+      "PageJobView" : {
+        "type" : "object",
+        "properties" : {
+          "items" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/JobView"
+            }
+          },
+          "next" : {
+            "type" : "string"
+          }
+        }
+      },
+      "NodeSummary" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "parentId" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "stage" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "action" : {
+            "type" : "string"
+          },
+          "buggy" : {
+            "type" : "boolean"
+          },
+          "plan" : {
+            "type" : "string"
+          },
+          "metricName" : {
+            "type" : "string"
+          },
+          "metric" : {
+            "type" : "number",
+            "format" : "double"
+          }
+        }
+      },
+      "PageNodeSummary" : {
+        "type" : "object",
+        "properties" : {
+          "items" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/NodeSummary"
+            }
+          },
+          "next" : {
+            "type" : "string"
+          }
+        }
+      },
+      "Node" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "parentId" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "stage" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "action" : {
+            "type" : "string"
+          },
+          "debugDepth" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "plan" : {
+            "type" : "string"
+          },
+          "code" : {
+            "type" : "string"
+          },
+          "output" : {
+            "type" : "string"
+          },
+          "buggy" : {
+            "type" : "boolean"
+          },
+          "summary" : {
+            "type" : "string"
+          },
+          "metricName" : {
+            "type" : "string"
+          },
+          "metric" : {
+            "type" : "number",
+            "format" : "double"
+          },
+          "lowerIsBetter" : {
+            "type" : "boolean"
+          }
+        }
+      },
+      "SseEmitter" : {
+        "type" : "object",
+        "properties" : {
+          "timeout" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }
+      }
+    }
+  }
+}

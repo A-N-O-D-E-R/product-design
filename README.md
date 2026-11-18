@@ -37,6 +37,25 @@ spring:
       # chat.options.model: claude-opus-5-5   # défaut
 ```
 
+### Research avec ai-scientist
+
+Pour une Question **technique ou de machine learning**, la research peut confier une étude à [ai-scientist](https://github.com/A-N-O-D-E-R/ai-scientist)
+en plus de la recherche web : un second outil, `ai_scientist`, proposé au modèle à côté de `web_search`. Il crée un job d'ideation
+(`POST /v1/ideations`), l'attend (`GET /v1/jobs/{id}`) et rend des idées de recherche avec hypothèse, travaux connexes (recherche
+bibliographique Semantic Scholar) et risques. Le résultat complet devient un **Artefact** de la Session (affiché comme un rapport),
+en plus du rapport final. Lent (minutes) et payant : une étude par recherche, coût plafonné.
+
+```yaml
+productdesigner:
+  ai-scientist:
+    url: https://ai-scientist.exemple.org
+    api-key: ais_...             # une clé d'API d'ai-scientist (Réglages > clés d'API)
+    # budget-usd: 2   max-generations: 3   timeout: 20m   poll-interval: 10s
+```
+Sans `url` et `api-key`, l'outil n'est pas proposé. Un échec, une pause ou un délai revient au modèle en résultat d'outil : la research continue
+sans lui. Le contrat est l'OpenAPI d'ai-scientist : `src/test/resources/contracts/ai-scientist-openapi.json` (copie de son instantané,
+à resynchroniser) valide la requête envoyée et les champs lus (`AiScientistTest`). Pas encore : les *experiment runs*.
+
 ### Base de données
 
 Postgres 17, schéma géré par Flyway (`V1` à `V20`), accès par `JdbcClient`.
@@ -114,6 +133,7 @@ tant qu'une bloquante n'est pas terminée.
 | `productdesigner.allowed-users` | vide | Qui peut entrer (voir Sécurité) |
 | `productdesigner.jira.label-factory` | `factory` | Étiquette des Stories exportées, prise par l'intake de digital-factory |
 | `productdesigner.recherche.tavily-api-key` | vide | Recherche web client de la research, tout fournisseur |
+| `productdesigner.ai-scientist.url` / `.api-key` | vide | Outil `ai_scientist` de la research (voir ci-dessus) |
 
 ## Docker
 
