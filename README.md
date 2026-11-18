@@ -111,14 +111,14 @@ par recherche). Réglage : `anode.jira.retry.max-retries` (3), `.delay` (1 s), `
 
 ```sh
 JAVA_HOME=~/.sdkman/candidates/java/25.0.2-oracle mvn package
-java -jar target/productdesigner-0.1.0-SNAPSHOT.jar
+java -jar target/productdesigner-0.2.0.jar   # avec SPRING_DATASOURCE_URL/USERNAME/PASSWORD et SPRING_DOCKER_COMPOSE_ENABLED=false
 ```
 
-Puis http://localhost:8080. Le jar contient le front ; la base et ses migrations sont créées au premier lancement.
+Puis http://localhost:8080. Le jar contient le front ; les migrations Flyway s'appliquent au premier lancement sur la base Postgres indiquée.
 
 **Développement** : `mvn spring-boot:run` pour le backend (port 8080) et `npm run dev` dans `frontend/` (le serveur Vite relaie `/api`).
 
-**Tests** : `mvn test` (ajouter `-Dskip.npm -Dskip.installnodenpm` pour ne pas rebuilder le front). Ils tournent contre de faux serveurs (Anthropic, OpenAI, Tavily, Jira, Confluence), sans appel réseau.
+**Tests** : `mvn test` (ajouter `-Dskip.npm -Dskip.installnodenpm` pour ne pas rebuilder le front). Ils tournent contre de faux serveurs (Anthropic, OpenAI, Tavily, Jira, Confluence), sans appel réseau, et contre un vrai Postgres (Testcontainers, Docker requis).
 
 ## Architecture
 
