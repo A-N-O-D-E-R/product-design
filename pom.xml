@@ -100,6 +100,12 @@
       <version>${aws.sdk.version}</version>
     </dependency>
 
+    <!-- idea-brief.schema.json : valide l'idea.json importé (POST /api/projets/import) -->
+    <dependency>
+      <groupId>com.networknt</groupId>
+      <artifactId>json-schema-validator</artifactId>
+      <version>3.0.8</version>
+    </dependency>
     <dependency>
       <groupId>org.projectlombok</groupId>
       <artifactId>lombok</artifactId>
