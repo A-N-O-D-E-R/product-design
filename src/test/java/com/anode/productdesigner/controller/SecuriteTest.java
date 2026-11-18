@@ -7,6 +7,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
+import com.anode.productdesigner.TestDb;
+
 import java.nio.file.Files;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -30,8 +32,7 @@ class SecuriteTest {
 
     @DynamicPropertySource
     static void dataDir(DynamicPropertyRegistry registry) throws Exception {
-        String dir = Files.createTempDirectory("productdesigner").toString();
-        registry.add("productdesigner.data-dir", () -> dir);
+        TestDb.enregistrer(registry);
     }
 
     @Autowired

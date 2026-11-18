@@ -1,5 +1,6 @@
 package com.anode.productdesigner.repository;
 
+import java.time.OffsetDateTime;
 import lombok.RequiredArgsConstructor;
 import java.util.List;
 import java.util.Optional;
@@ -13,10 +14,10 @@ import org.springframework.stereotype.Repository;
 public class SessionRepository {
 
     /** questionId et question (titre) : null pour la Session qui trace la Map. tache, progression : null hors Sessions research (D-26). */
-    public record Session(long id, long projetId, String methode, String statut, String createdAt, Long questionId, String question,
+    public record Session(long id, long projetId, String methode, String statut, OffsetDateTime createdAt, Long questionId, String question,
                           Long continuedFrom, String tache, String progression) {}
 
-    public record Artefact(long id, String type, String contenu, String createdAt) {}
+    public record Artefact(long id, String type, String contenu, OffsetDateTime createdAt) {}
 
     public record MessageLigne(long id, String role, String contenu, boolean visible, boolean incomplet) {}
 
@@ -93,7 +94,7 @@ public class SessionRepository {
     }
 
     public void marquerIncomplet(long messageId) {
-        jdbc.sql("UPDATE message SET incomplet = 1 WHERE id = ?").param(messageId).update();
+        jdbc.sql("UPDATE message SET incomplet = true WHERE id = ?").param(messageId).update();
     }
 
     public void majUsage(long messageId, String modele, long input, long output, long cacheRead, long cacheWrite) {

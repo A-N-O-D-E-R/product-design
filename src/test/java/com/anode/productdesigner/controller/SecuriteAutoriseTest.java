@@ -5,6 +5,8 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 
+import com.anode.productdesigner.TestDb;
+
 import java.nio.file.Files;
 
 import org.junit.jupiter.api.Test;
@@ -23,8 +25,7 @@ class SecuriteAutoriseTest {
 
     @DynamicPropertySource
     static void dataDir(DynamicPropertyRegistry registry) throws Exception {
-        String dir = Files.createTempDirectory("productdesigner").toString();
-        registry.add("productdesigner.data-dir", () -> dir);
+        TestDb.enregistrer(registry);
     }
 
     @Autowired

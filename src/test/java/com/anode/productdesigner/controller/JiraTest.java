@@ -7,6 +7,8 @@ import com.anode.productdesigner.service.ConfigManquanteException;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.anode.productdesigner.TestDb;
+
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -122,8 +124,7 @@ class JiraTest {
             }
         });
         fauxJira.start();
-        String dir = Files.createTempDirectory("productdesigner").toString();
-        registry.add("productdesigner.data-dir", () -> dir);
+        TestDb.enregistrer(registry);
         registry.add("anode.jira.base-url", () -> "http://localhost:" + fauxJira.getAddress().getPort() + "/");
         registry.add("anode.jira.email", () -> "moi@exemple.fr");
         registry.add("anode.jira.api-token", () -> "secret");
@@ -158,7 +159,7 @@ class JiraTest {
 
     long roadmap(String nom) throws Exception {
         String projet = post("/api/projets", "{\"nom\":\"" + nom + "\"}").replaceAll(".*\"id\":(\\d+),.*", "$1");
-        long spec = jdbc.sql("INSERT INTO spec (projet_id, version, contenu) VALUES (?, 1, 'x') RETURNING id").param(projet)
+        long spec = jdbc.sql("INSERT INTO spec (projet_id, version, contenu) VALUES (?, 1, 'x') RETURNING id").param(Long.parseLong(projet))
                 .query(Long.class).single();
         roadmaps.enregistrer(spec, new RoadmapGeneree(List.of(
                 new JalonGenere("Socle", List.of(

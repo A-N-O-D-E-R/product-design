@@ -1,0 +1,17 @@
+# Postgres de développement : mvn spring-boot:run le démarre (spring-boot-docker-compose) et en branche la datasource.
+services:
+  db:
+    image: postgres:17-alpine
+    ports: ["127.0.0.1::5432"]
+    environment:
+      POSTGRES_DB: productdesigner
+      POSTGRES_USER: productdesigner
+      POSTGRES_PASSWORD: productdesigner
+    volumes: [db-data:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U productdesigner"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+volumes:
+  db-data:

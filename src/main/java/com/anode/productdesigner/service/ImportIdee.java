@@ -1,5 +1,6 @@
 package com.anode.productdesigner.service;
 
+import java.time.OffsetDateTime;
 import com.networknt.schema.InputFormat;
 import com.networknt.schema.Schema;
 import com.networknt.schema.SchemaRegistry;
@@ -40,7 +41,7 @@ import tools.jackson.databind.json.JsonMapper;
 @RequiredArgsConstructor
 public class ImportIdee {
 
-    public record Importe(long id, String nom, String description, String createdAt, String sourceIdeaUrl, long sessionTraceId,
+    public record Importe(long id, String nom, String description, OffsetDateTime createdAt, String sourceIdeaUrl, long sessionTraceId,
                           int questions, int horsPerimetre, int brouillard, Long sessionResearchId) {}
 
     private static final Schema SCHEMA = chargerSchema();

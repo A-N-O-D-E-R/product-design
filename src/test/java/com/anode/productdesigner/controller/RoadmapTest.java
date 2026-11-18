@@ -3,6 +3,8 @@ package com.anode.productdesigner.controller;
 import com.anode.productdesigner.service.RoadmapService;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.anode.productdesigner.TestDb;
+
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -29,8 +31,7 @@ class RoadmapTest {
 
     @DynamicPropertySource
     static void dataDir(DynamicPropertyRegistry registry) throws Exception {
-        String dir = Files.createTempDirectory("productdesigner").toString();
-        registry.add("productdesigner.data-dir", () -> dir);
+        TestDb.enregistrer(registry);
     }
 
     @LocalServerPort

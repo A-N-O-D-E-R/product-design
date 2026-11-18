@@ -112,7 +112,7 @@ public class RoadmapRepository {
     }
 
     public void ajouterPrerequis(long ticketId, long parId) {
-        jdbc.sql("INSERT OR IGNORE INTO ticket_bloque (ticket_id, bloque_par_id) VALUES (?, ?)").params(ticketId, parId).update();
+        jdbc.sql("INSERT INTO ticket_bloque (ticket_id, bloque_par_id) VALUES (?, ?) ON CONFLICT DO NOTHING").params(ticketId, parId).update();
     }
 
     // --- Éléments Jira laissés orphelins (E-28) ---
@@ -120,15 +120,16 @@ public class RoadmapRepository {
     /** Les issues Jira de tous les Jalons et Tickets de la Spec, avant qu'ils soient remplacés. */
     public void orphelinerRoadmap(long specId) {
         jdbc.sql("""
-                        INSERT OR IGNORE INTO jira_orphelin (spec_id, cle, titre)
+                        INSERT INTO jira_orphelin (spec_id, cle, titre)
                         SELECT ?, jira_key, titre FROM jalon WHERE spec_id = ? AND jira_key IS NOT NULL
                         UNION ALL SELECT ?, t.jira_key, t.titre FROM ticket t JOIN jalon j ON j.id = t.jalon_id
-                        WHERE j.spec_id = ? AND t.jira_key IS NOT NULL""")
+                        WHERE j.spec_id = ? AND t.jira_key IS NOT NULL
+                        ON CONFLICT DO NOTHING""")
                 .params(specId, specId, specId, specId).update();
     }
 
     public void orphelinerTicket(long specId, long ticketId) {
-        jdbc.sql("INSERT OR IGNORE INTO jira_orphelin (spec_id, cle, titre) SELECT ?, jira_key, titre FROM ticket WHERE id = ? AND jira_key IS NOT NULL")
+        jdbc.sql("INSERT INTO jira_orphelin (spec_id, cle, titre) SELECT ?, jira_key, titre FROM ticket WHERE id = ? AND jira_key IS NOT NULL ON CONFLICT DO NOTHING")
                 .params(specId, ticketId).update();
     }
 
@@ -140,20 +141,20 @@ public class RoadmapRepository {
     // --- Suivi de l'export Jira ---
 
     public Set<Long> jalonsIncertains(long specId) {
-        return Set.copyOf(jdbc.sql("SELECT id FROM jalon WHERE spec_id = ? AND jira_incertain = 1").param(specId).query(Long.class).list());
+        return Set.copyOf(jdbc.sql("SELECT id FROM jalon WHERE spec_id = ? AND jira_incertain = true").param(specId).query(Long.class).list());
     }
 
     public Set<Long> ticketsIncertains(long specId) {
-        return Set.copyOf(jdbc.sql("SELECT t.id FROM ticket t JOIN jalon j ON j.id = t.jalon_id WHERE j.spec_id = ? AND t.jira_incertain = 1")
+        return Set.copyOf(jdbc.sql("SELECT t.id FROM ticket t JOIN jalon j ON j.id = t.jalon_id WHERE j.spec_id = ? AND t.jira_incertain = true")
                 .param(specId).query(Long.class).list());
     }
 
     public void majCleJalon(long id, String cle) {
-        jdbc.sql("UPDATE jalon SET jira_key = ?, jira_incertain = 0 WHERE id = ?").params(cle, id).update();
+        jdbc.sql("UPDATE jalon SET jira_key = ?, jira_incertain = false WHERE id = ?").params(cle, id).update();
     }
 
     public void majCleTicket(long id, String cle) {
-        jdbc.sql("UPDATE ticket SET jira_key = ?, jira_incertain = 0 WHERE id = ?").params(cle, id).update();
+        jdbc.sql("UPDATE ticket SET jira_key = ?, jira_incertain = false WHERE id = ?").params(cle, id).update();
     }
 
     public void majIncertainJalon(long id, boolean incertain) {
@@ -169,12 +170,12 @@ public class RoadmapRepository {
                         SELECT tb.ticket_id, tb.bloque_par_id AS par_id, t.jira_key AS cle, par.jira_key AS par_cle
                         FROM ticket_bloque tb JOIN ticket t ON t.id = tb.ticket_id JOIN ticket par ON par.id = tb.bloque_par_id
                         JOIN jalon j ON j.id = t.jalon_id
-                        WHERE j.spec_id = ? AND tb.jira_lie = 0 AND t.jira_key IS NOT NULL AND par.jira_key IS NOT NULL""")
+                        WHERE j.spec_id = ? AND NOT tb.jira_lie AND t.jira_key IS NOT NULL AND par.jira_key IS NOT NULL""")
                 .param(specId).query(Lien.class).list();
     }
 
     public void marquerLie(long ticketId, long parId) {
-        jdbc.sql("UPDATE ticket_bloque SET jira_lie = 1 WHERE ticket_id = ? AND bloque_par_id = ?").params(ticketId, parId).update();
+        jdbc.sql("UPDATE ticket_bloque SET jira_lie = true WHERE ticket_id = ? AND bloque_par_id = ?").params(ticketId, parId).update();
     }
 
     public void memoriserProjetJira(long specId, String projet) {

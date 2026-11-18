@@ -1,5 +1,6 @@
 package com.anode.productdesigner.repository;
 
+import java.time.OffsetDateTime;
 import lombok.RequiredArgsConstructor;
 import java.util.List;
 import java.util.Optional;
@@ -12,7 +13,7 @@ import org.springframework.stereotype.Repository;
 @RequiredArgsConstructor
 public class DecisionRepository {
 
-    public record Decision(long id, int numero, String texte, long sessionId, String confirmedAt) {}
+    public record Decision(long id, int numero, String texte, long sessionId, OffsetDateTime confirmedAt) {}
 
     private final JdbcClient jdbc;
 

@@ -1,5 +1,6 @@
 package com.anode.productdesigner.service;
 
+import java.time.OffsetDateTime;
 import lombok.RequiredArgsConstructor;
 import java.util.List;
 
@@ -18,7 +19,7 @@ import org.springframework.web.server.ResponseStatusException;
 @RequiredArgsConstructor
 public class ProjetService {
 
-    public record Cree(long id, String nom, String description, String createdAt, long sessionTraceId) {}
+    public record Cree(long id, String nom, String description, OffsetDateTime createdAt, long sessionTraceId) {}
 
     private final ProjetRepository projets;
     private final MapRepository maps;

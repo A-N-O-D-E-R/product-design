@@ -1,5 +1,6 @@
 package com.anode.productdesigner.repository;
 
+import java.time.OffsetDateTime;
 import lombok.RequiredArgsConstructor;
 import java.util.List;
 import java.util.Optional;
@@ -12,9 +13,9 @@ import org.springframework.stereotype.Repository;
 public class SpecRepository {
 
     /** confluenceVersion : version de la page Confluence publiée depuis cette Spec (null sinon). */
-    public record Spec(long id, int version, String contenu, String createdAt, Integer confluenceVersion, String confluenceEspace) {}
+    public record Spec(long id, int version, String contenu, OffsetDateTime createdAt, Integer confluenceVersion, String confluenceEspace) {}
 
-    public record Version(long id, int version, String createdAt) {}
+    public record Version(long id, int version, OffsetDateTime createdAt) {}
 
     public record Creee(long id, int version) {}
 
