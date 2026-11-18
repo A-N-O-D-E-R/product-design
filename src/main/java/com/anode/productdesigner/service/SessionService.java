@@ -66,6 +66,9 @@ public class SessionService {
     /** Recherches web client (Tavily) par tour. */
     private static final int RECHERCHES_MAX = 15;
 
+    /** Études AI Scientist par tour : lentes et payantes. */
+    private static final int SCIENTIST_MAX = 1;
+
     private final SessionRepository sessions;
     private final ProjetRepository projets;
     private final MapRepository maps;
@@ -73,13 +76,14 @@ public class SessionService {
     private final Llm llm;
     private final Methodes methodes;
     private final MapService map;
+    private final AiScientist aiScientist;
     /** Sessions dont une réponse est en cours de stream. */
     private final Set<Long> repondent = ConcurrentHashMap.newKeySet();
     private final long fenetre;
     private final double seuil;
 
     public SessionService(SessionRepository sessions, ProjetRepository projets, MapRepository maps, DecisionRepository decisions,
-                          Llm llm, Methodes methodes, MapService map,
+                          Llm llm, Methodes methodes, MapService map, AiScientist aiScientist,
                           @Value("${productdesigner.contexte.fenetre:1000000}") long fenetre,
                           @Value("${productdesigner.contexte.seuil:0.8}") double seuil) {
         this.sessions = sessions;
@@ -89,6 +93,7 @@ public class SessionService {
         this.llm = llm;
         this.methodes = methodes;
         this.map = map;
+        this.aiScientist = aiScientist;
         this.fenetre = fenetre;
         this.seuil = seuil;
     }
@@ -389,10 +394,11 @@ public class SessionService {
     private List<Reponse> tourComplet(Session session, Llm.Deltas deltas, IntConsumer apresEtape) throws IOException {
         List<Reponse> reponses = new ArrayList<>(List.of(tour(session, deltas)));
         int recherchesClient = 0;
+        int etudes = 0;
         while (true) {
             Reponse r = reponses.getLast();
             List<ToolCall> aExecuter = Record.appel(r).isPresent() ? List.of()
-                    : r.appels().stream().filter(a -> Recherche.NOM.equals(a.name())).toList();
+                    : r.appels().stream().filter(a -> Recherche.NOM.equals(a.name()) || AiScientist.NOM.equals(a.name())).toList();
             if (aExecuter.isEmpty() && !r.pause()) {
                 return reponses;
             }
@@ -405,14 +411,30 @@ public class SessionService {
             } else {
                 ArrayNode resultats = Conversation.JSON.createArrayNode();
                 for (ToolCall a : aExecuter) {
-                    resultats.add(Conversation.resultat(a.id(), recherchesClient++ < RECHERCHES_MAX ? llm.rechercher(a.arguments())
-                            : "Limite de recherches atteinte : rédige maintenant avec ce que tu as."));
+                    String sortie;
+                    if (AiScientist.NOM.equals(a.name())) {
+                        sortie = etudes++ < SCIENTIST_MAX ? etudeScientist(session.id(), a.arguments())
+                                : "Une seule étude AI Scientist par recherche : utilise le résultat déjà obtenu.";
+                    } else {
+                        sortie = recherchesClient++ < RECHERCHES_MAX ? llm.rechercher(a.arguments())
+                                : "Limite de recherches atteinte : rédige maintenant avec ce que tu as.";
+                    }
+                    resultats.add(Conversation.resultat(a.id(), sortie));
                 }
                 enregistrer(session.id(), "user", Conversation.utilisateur(resultats), false);
             }
             apresEtape.accept(recherches(reponses));
             reponses.add(tour(session, deltas));
         }
+    }
+
+    /** Une étude AI Scientist : le job est attendu, son résultat complet devient un Artefact de la Session (en plus du rapport final). */
+    private String etudeScientist(long sessionId, String arguments) {
+        AiScientist.Resultat r = aiScientist.executer(arguments, p -> sessions.progression(sessionId, p));
+        if (r.artefact() != null) {
+            sessions.ajouterArtefact(sessionId, "research_md", r.artefact());
+        }
+        return r.sortie();
     }
 
     /**
@@ -425,6 +447,9 @@ public class SessionService {
         List<ToolCallback> outils = new ArrayList<>(List.of(Record.TOOL));
         if (research) {
             outils.addAll(llm.outilsRecherche());
+            if (aiScientist.disponible()) {
+                outils.add(aiScientist);
+            }
         }
         Reponse r;
         try {
