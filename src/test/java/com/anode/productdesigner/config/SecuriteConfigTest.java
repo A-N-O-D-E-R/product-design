@@ -16,17 +16,19 @@ class SecuriteConfigTest {
     @Test
     void leLoginMockExigeUneAdresseLocale() {
         var s = new Securite();
-        assertThat(s.gardeSecurite(true, false, "127.0.0.1")).isNotNull();
-        assertThat(s.gardeSecurite(true, false, "::1")).isNotNull();
-        assertThatThrownBy(() -> s.gardeSecurite(true, false, "0.0.0.0")).isInstanceOf(IllegalStateException.class).hasMessageContaining("sans mot de passe");
-        assertThatThrownBy(() -> s.gardeSecurite(true, false, "")).isInstanceOf(IllegalStateException.class);
+        assertThat(s.gardeSecurite(true, false, "127.0.0.1", false)).isNotNull();
+        assertThat(s.gardeSecurite(true, false, "::1", false)).isNotNull();
+        assertThatThrownBy(() -> s.gardeSecurite(true, false, "0.0.0.0", false)).isInstanceOf(IllegalStateException.class).hasMessageContaining("sans mot de passe");
+        assertThatThrownBy(() -> s.gardeSecurite(true, false, "", false)).isInstanceOf(IllegalStateException.class);
+        // dans un conteneur dont le port n'est publié qu'en local, l'opérateur le déclare
+        assertThat(s.gardeSecurite(true, false, "0.0.0.0", true)).isNotNull();
         // OIDC, lui, peut servir le réseau
-        assertThat(s.gardeSecurite(false, true, "0.0.0.0")).isNotNull();
+        assertThat(s.gardeSecurite(false, true, "0.0.0.0", false)).isNotNull();
     }
 
     @Test
     void sansAucunLoginLeDemarrageEchoue() {
-        assertThatThrownBy(() -> new Securite().gardeSecurite(false, false, "127.0.0.1"))
+        assertThatThrownBy(() -> new Securite().gardeSecurite(false, false, "127.0.0.1", false))
                 .isInstanceOf(IllegalStateException.class).hasMessageContaining("Aucun login configuré");
     }
 

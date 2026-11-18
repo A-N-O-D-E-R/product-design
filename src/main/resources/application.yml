@@ -31,6 +31,11 @@ spring:
   # Ailleurs : SPRING_DATASOURCE_URL, SPRING_DATASOURCE_USERNAME et SPRING_DATASOURCE_PASSWORD (SPRING_DOCKER_COMPOSE_ENABLED=false).
   docker.compose.lifecycle-management: start-only
 
+# Contrat OpenAPI de l'API, derrière la connexion comme le reste de /api (le front en tire ses types : pnpm api:types).
+springdoc:
+  api-docs.path: /api/openapi.json
+  paths-to-match: /api/**
+
 # Sécurité (starter de la collection). Poste local : login mock (n'importe quel nom et mot de passe, loopback seulement).
 # Hébergé : PRODUCTDESIGNER_MOCK=false, PRODUCTDESIGNER_OIDC=true et le fournisseur sous
 # spring.security.oauth2.client.registration.oidc.* / provider.oidc.issuer-uri (voir README).

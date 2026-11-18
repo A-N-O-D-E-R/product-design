@@ -112,14 +112,20 @@ class Securite {
     /** Le démarrage échoue plutôt que d'exposer l'API : un login sans mot de passe sur une interface réseau, ou aucun login. */
     @Bean
     GardeSecurite gardeSecurite(@Value("${anode.security.mock:false}") boolean mock, @Value("${anode.security.env-oidc:false}") boolean oidc,
-                                @Value("${server.address:}") String adresse) {
+                                @Value("${server.address:}") String adresse,
+                                @Value("${productdesigner.mock-publie-en-local:false}") boolean publieEnLocal) {
         if (!mock && !oidc) {
             throw new IllegalStateException("Aucun login configuré : anode.security.mock=true (poste local, mot de passe libre, loopback"
                     + " seulement) ou anode.security.env-oidc=true avec spring.security.oauth2.client.registration.oidc.* (voir README).");
         }
-        if (mock && !boucleLocale(adresse)) {
+        if (mock && !boucleLocale(adresse) && publieEnLocal) {
+            // l'opérateur affirme que le port n'est publié que sur 127.0.0.1 (compose.yaml) : le conteneur écoute sur 0.0.0.0 derrière
+            org.slf4j.LoggerFactory.getLogger(Securite.class).warn("anode.security.mock=true sur {} : login sans mot de passe. Sûr seulement parce que"
+                    + " le port est publié sur 127.0.0.1 seul (productdesigner.mock-publie-en-local=true) ; ne jamais le publier ailleurs.", adresse);
+        } else if (mock && !boucleLocale(adresse)) {
             throw new IllegalStateException("anode.security.mock=true est un login sans mot de passe : server.address doit être une adresse"
-                    + " locale (127.0.0.1), pas '" + adresse + "'. Pour servir d'autres machines : anode.security.env-oidc=true.");
+                    + " locale (127.0.0.1), pas '" + adresse + "'. Pour servir d'autres machines : anode.security.env-oidc=true"
+                    + " (ou, dans un conteneur dont le port n'est publié qu'en local : productdesigner.mock-publie-en-local=true).");
         }
         return new GardeSecurite();
     }
