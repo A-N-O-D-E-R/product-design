@@ -11,7 +11,7 @@ reprises sur 429 avec Resilience4j. Les trois autres applications utilisent `spr
 ## Décision
 
 - Coordonnées `io.github.a-n-o-d-e-r`, package de base `com.anode.productdesigner` (était `com.anode.product.designer`),
-  version 0.2.0, BOM `springboot-starter-collection-dependencies` (qui apporte aussi le BOM Spring AI).
+  version 0.3.0, BOM `springboot-starter-collection-dependencies` (qui apporte aussi le BOM Spring AI).
 - Jira et Confluence passent par `spring-boot-starter-jira` et `spring-boot-starter-confluence`. Config : `anode.jira.*` et
   `anode.confluence.*` (remplacent `anode.atlassian.*`), avec `cloud-id` / `gateway-url` pour les tokens scopés.
 - Resilience4j est supprimé : les reprises sont dans les starters (`TransientResponseRetry` : 429 avec `Retry-After`, 502/503/504
@@ -23,7 +23,7 @@ reprises sur 429 avec Resilience4j. Les trois autres applications utilisent `spr
 
 ## Conséquences
 
-- Il faut la collection 0.2.0 publiée pour construire hors de la machine de développement.
+- La collection 0.3.0 est publiée sur Maven Central : le build la résout hors de la machine de développement (0.2.0 précède l'API de création Jira et les post-processeurs de sécurité utilisés ici).
 - Migration de config : `~/.productdesigner/application.yml` doit passer de `anode.atlassian.*` à `anode.jira.*` et
   `anode.confluence.*`.
 - Pas encore fait (au moment de cet ADR) : Postgres (ADR 0007), sécurité (ADR 0006), pnpm / React Query / vitest, OpenAPI,

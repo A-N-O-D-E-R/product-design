@@ -18,4 +18,4 @@ Date: 2026-11-18 — Status: accepted. Aligne le front sur celui de digital-fact
 ## Reste hors React Query
 
 Les flux SSE (`postSse`, `useSession`, génération de spec et de roadmap) gardent leur état local : ils sont pilotés par le flux, pas par une lecture.
-`SpecSection` et `RoadmapSection` lisent encore avec `useEffect` ; à convertir quand ces composants seront retouchés.
+Les lectures de `SpecSection` et `RoadmapSection` passent par React Query ; leurs écritures renvoient la Roadmap à jour, qui remplace le cache.

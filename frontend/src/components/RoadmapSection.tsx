@@ -1,35 +1,36 @@
 import { useEffect, useState, type FormEvent } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { queries } from '@/api/query'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Markdown } from '@/components/Markdown'
-import { roadmap as api, type ExportJira, type JiraStatus, type Jalon, type Roadmap, type Ticket } from '@/api/roadmap'
+import { roadmap as api, type ExportJira, type Jalon, type Roadmap, type Ticket } from '@/api/roadmap'
 
 type Edition = { jalonId: number; titre: string; corps: string; exigences: string; blockedBy: number[] }
 
 /** Roadmap d'une version de Spec : génération (E-23, E-24) et édition avant export (E-25). */
 export function RoadmapSection({ specId }: { specId: number }) {
-  const [roadmap, setRoadmap] = useState<Roadmap>()
+  const client = useQueryClient()
+  const { data: roadmap } = useQuery(queries.roadmap(specId))
+  const { data: jira } = useQuery(queries.jiraStatus())
+  /** Chaque écriture renvoie la Roadmap à jour : elle remplace celle du cache. */
+  const setRoadmap = (r: Roadmap) => client.setQueryData(queries.roadmap(specId).queryKey, r)
+  const relire = () => client.invalidateQueries({ queryKey: queries.roadmap(specId).queryKey })
   const [caracteres, setCaracteres] = useState<number>()
   const [avertissements, setAvertissements] = useState<string[]>([])
   const [erreur, setErreur] = useState<string>()
-  const [jira, setJira] = useState<JiraStatus>()
-  const [projetJira, setProjetJira] = useState('')
+  // le projet Jira saisi pour cette version ; à défaut, celui de la Roadmap
+  const [saisie, setSaisie] = useState<{ specId: number; valeur: string }>()
+  const projetJira = saisie?.specId === specId ? saisie.valeur : (roadmap?.jiraProjet ?? '')
+  const setProjetJira = (valeur: string) => setSaisie({ specId, valeur })
   const [exportEnCours, setExportEnCours] = useState(false)
   const [resultat, setResultat] = useState<ExportJira>()
 
   useEffect(() => {
     setAvertissements([])
     setResultat(undefined)
-    api.lire(specId).then((r) => {
-      setRoadmap(r)
-      setProjetJira(r.jiraProjet ?? '')
-    })
   }, [specId])
-
-  useEffect(() => {
-    api.jiraStatus().then(setJira)
-  }, [])
 
   /** Export (E-26 à E-30) : crée ce qui manque, met à jour le reste, ne supprime rien dans Jira. */
   async function exporter() {
@@ -42,7 +43,7 @@ export function RoadmapSection({ specId }: { specId: number }) {
       setErreur((e as Error).message)
     }
     setExportEnCours(false)
-    api.lire(specId).then(setRoadmap)
+    await relire()
   }
 
   const tickets = roadmap?.jalons.flatMap((j) => j.tickets) ?? []
@@ -63,7 +64,7 @@ export function RoadmapSection({ specId }: { specId: number }) {
       setErreur((e as Error).message)
     }
     setCaracteres(undefined)
-    api.lire(specId).then(setRoadmap)
+    await relire()
   }
 
   async function ecrire(requete: Promise<Roadmap>) {
