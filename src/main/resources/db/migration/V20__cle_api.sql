@@ -3,11 +3,11 @@
 CREATE TABLE cle_api (
     id           TEXT PRIMARY KEY,
     nom          TEXT NOT NULL,
-    hash         BLOB NOT NULL UNIQUE,
+    hash         bytea NOT NULL UNIQUE,
     indice       TEXT NOT NULL,
     cree_par     TEXT NOT NULL,
-    created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
-    expire_le    TEXT NOT NULL,
-    utilisee_le  TEXT,
-    revoquee_le  TEXT
+    created_at   timestamptz NOT NULL DEFAULT now(),
+    expire_le    timestamptz NOT NULL,
+    utilisee_le  timestamptz,
+    revoquee_le  timestamptz
 );

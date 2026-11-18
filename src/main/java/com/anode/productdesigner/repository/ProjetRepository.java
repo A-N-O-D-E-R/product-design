@@ -1,5 +1,6 @@
 package com.anode.productdesigner.repository;
 
+import java.time.OffsetDateTime;
 import lombok.RequiredArgsConstructor;
 import java.util.List;
 import java.util.Optional;
@@ -11,7 +12,7 @@ import org.springframework.stereotype.Repository;
 @RequiredArgsConstructor
 public class ProjetRepository {
 
-    public record Projet(long id, String nom, String description, String createdAt, String sourceIdeaUrl) {}
+    public record Projet(long id, String nom, String description, OffsetDateTime createdAt, String sourceIdeaUrl) {}
 
     private static final String COLONNES = "id, nom, description, created_at, source_idea_url";
 

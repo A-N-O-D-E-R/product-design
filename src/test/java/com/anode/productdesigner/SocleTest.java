@@ -23,12 +23,9 @@ import org.springframework.test.context.DynamicPropertySource;
         properties = "spring.ai.anthropic.api-key=")
 class SocleTest {
 
-    static Path dataDir;
-
     @DynamicPropertySource
-    static void dataDir(DynamicPropertyRegistry registry) throws Exception {
-        dataDir = Files.createTempDirectory("productdesigner");
-        registry.add("productdesigner.data-dir", dataDir::toString);
+    static void baseDeTest(DynamicPropertyRegistry registry) {
+        TestDb.enregistrer(registry);
     }
 
     @LocalServerPort
@@ -62,9 +59,10 @@ class SocleTest {
 
     @Test
     void baseEtMigrationsCreees() {
-        assertThat(dataDir.resolve("data.db")).exists();
-        assertThat(jdbc.sql("select count(*) from flyway_schema_history where success = 0")
-                .query(Integer.class).single()).isZero();
+        assertThat(jdbc.sql("select count(*) from flyway_schema_history where not success").query(Integer.class).single()).isZero();
+        assertThat(jdbc.sql("select count(*) from flyway_schema_history where version is not null").query(Integer.class).single())
+                .as("V1 à V20").isEqualTo(20);
+        assertThat(jdbc.sql("select version() ").query(String.class).single()).contains("PostgreSQL 17");
     }
 
     @Value("${server.address}")

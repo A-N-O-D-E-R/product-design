@@ -5,6 +5,8 @@ import com.anode.productdesigner.service.Record;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.anode.productdesigner.TestDb;
+
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -106,8 +108,7 @@ class SessionTest {
             exchange.close();
         });
         fauxAnthropic.start();
-        String dir = Files.createTempDirectory("productdesigner").toString();
-        registry.add("productdesigner.data-dir", () -> dir);
+        TestDb.enregistrer(registry);
         registry.add("spring.ai.anthropic.api-key", () -> "test");
         // Faux serveur : 10 tokens en entrée, soit 10 % d'une fenêtre de 100 ; seuil abaissé à 5 %.
         registry.add("productdesigner.contexte.fenetre", () -> "100");
@@ -474,7 +475,7 @@ class SessionTest {
         attendreFin(id);
         String messageId = send("GET", "/api/sessions/" + id + "/decisions", null).replaceAll(".*?\"messageId\":(\\d+).*", "$1");
         send("POST", "/api/sessions/" + id + "/decisions", "{\"messageId\":" + messageId + ",\"indice\":0,\"texte\":\"Retenu\"}");
-        jdbc.sql("UPDATE session SET tache = 'echec' WHERE id = ?").param(id).update();
+        jdbc.sql("UPDATE session SET tache = 'echec' WHERE id = ?").param(Long.parseLong(id)).update();
         assertThat(send("POST", "/api/sessions/" + id + "/relancer", null)).contains("Des Décisions de cette research sont déjà confirmées");
         assertThat(send("GET", "/api/sessions/" + id + "/decisions", null)).contains("Retenu");
     }
@@ -548,7 +549,7 @@ class SessionTest {
         attendreFin(id);
 
         // Simule un arrêt pendant la research : statut resté en_cours, puis démarrage.
-        jdbc.sql("UPDATE session SET tache = 'en_cours' WHERE id = ?").param(id).update();
+        jdbc.sql("UPDATE session SET tache = 'en_cours' WHERE id = ?").param(Long.parseLong(id)).update();
         sessions.interrompreResearches();
         assertThat(send("GET", "/api/sessions/" + id, null)).contains("\"tache\":\"echec\"", "redémarrage");
 
@@ -559,7 +560,7 @@ class SessionTest {
         // Repart de zéro : seule la consigne, sans les messages de la tentative ratée.
         assertThat(requetes.getFirst()).contains(SessionService.RESEARCH).doesNotContain("ENC-SECRET-123", "Encore une pause");
         assertThat(send("POST", "/api/sessions/" + id + "/relancer", null)).contains("Seule une research en échec");
-        assertThat(jdbc.sql("SELECT count(*) FROM artefact WHERE session_id = ?").param(id).query(Integer.class).single()).isEqualTo(1);
+        assertThat(jdbc.sql("SELECT count(*) FROM artefact WHERE session_id = ?").param(Long.parseLong(id)).query(Integer.class).single()).isEqualTo(1);
     }
 
     String attendreFin(String id) throws Exception {

@@ -2,6 +2,8 @@ package com.anode.productdesigner.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.anode.productdesigner.TestDb;
+
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -92,8 +94,7 @@ class OpenAiTest {
         });
         faux.start();
         String base = "http://localhost:" + faux.getAddress().getPort();
-        String dir = Files.createTempDirectory("productdesigner").toString();
-        registry.add("productdesigner.data-dir", () -> dir);
+        TestDb.enregistrer(registry);
         registry.add("spring.ai.model.chat", () -> "openai");
         registry.add("spring.ai.openai.api-key", () -> "test");
         registry.add("spring.ai.openai.base-url", () -> base + "/v1");

@@ -3,6 +3,8 @@ package com.anode.productdesigner.controller;
 import com.anode.productdesigner.service.MapService;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.anode.productdesigner.TestDb;
+
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -22,8 +24,7 @@ class MapTest {
 
     @DynamicPropertySource
     static void dataDir(DynamicPropertyRegistry registry) throws Exception {
-        String dir = Files.createTempDirectory("productdesigner").toString();
-        registry.add("productdesigner.data-dir", () -> dir);
+        TestDb.enregistrer(registry);
     }
 
     @LocalServerPort
@@ -54,7 +55,9 @@ class MapTest {
         String q2 = jdbc.sql("SELECT id FROM question WHERE titre = 'Modèle'").query(String.class).single();
         send("PUT", p + "/questions/" + q2, "{\"titre\":\"Modèle de données\",\"corps\":\"Entités ?\",\"type\":\"grilling\",\"blockedBy\":[]}");
         send("POST", p + "/hors-perimetre", "{\"texte\":\"Mobile\"}");
-        String b = id(send("POST", p + "/brouillard", "{\"texte\":\"Coûts\"}").body().replaceAll(".*\"brouillard\":\\[", ""));
+        send("POST", p + "/brouillard", "{\"texte\":\"Coûts\"}");
+        // l'id de la ligne de Brouillard elle-même (la réponse liste aussi les Hors périmètre, dont les ids sont ceux d'une autre table)
+        String b = jdbc.sql("SELECT id FROM brouillard WHERE texte = 'Coûts' ORDER BY id DESC LIMIT 1").query(String.class).single();
         send("PUT", p + "/brouillard/" + b, "{\"texte\":\"Coûts LLM\"}");
 
         String carte = send("GET", p + "/map", null).body();
@@ -82,9 +85,9 @@ class MapTest {
         for (String statut : new String[] {"open", "claimed", "resolved"}) {
             send("POST", p + "/questions", "{\"titre\":\"" + statut + "\",\"corps\":\"\",\"type\":\"grilling\",\"blockedBy\":[]}");
             String q = jdbc.sql("SELECT id FROM question WHERE titre = ?").param(statut).query(String.class).single();
-            jdbc.sql("UPDATE question SET statut = ? WHERE id = ?").params(statut, q).update();
+            jdbc.sql("UPDATE question SET statut = ? WHERE id = ?").params(statut, Long.parseLong(q)).update();
             assertThat(send("POST", p + "/questions/" + q + "/hors-perimetre", null).statusCode()).isEqualTo(200);
-            assertThat(jdbc.sql("SELECT statut FROM question WHERE id = ?").param(q).query(String.class).single())
+            assertThat(jdbc.sql("SELECT statut FROM question WHERE id = ?").param(Long.parseLong(q)).query(String.class).single())
                     .isEqualTo("hors_perimetre");
         }
     }
@@ -105,11 +108,11 @@ class MapTest {
         HttpResponse<String> session = send("POST", p + "/questions/" + q1 + "/sessions", null);
         assertThat(session.statusCode()).isEqualTo(201);
         assertThat(session.body()).contains("\"methode\":\"grilling\"", "\"questionId\":" + q1, "\"question\":\"Socle\"");
-        assertThat(jdbc.sql("SELECT statut FROM question WHERE id = ?").param(q1).query(String.class).single()).isEqualTo("claimed");
+        assertThat(jdbc.sql("SELECT statut FROM question WHERE id = ?").param(Long.parseLong(q1)).query(String.class).single()).isEqualTo("claimed");
         assertThat(send("POST", p + "/questions/" + q1 + "/sessions", null).statusCode()).isEqualTo(409);
 
         // Bloqueuse résolue : la suivante entre dans la frontière.
-        jdbc.sql("UPDATE question SET statut = 'resolved' WHERE id = ?").param(q1).update();
+        jdbc.sql("UPDATE question SET statut = 'resolved' WHERE id = ?").param(Long.parseLong(q1)).update();
         assertThat(send("GET", p + "/map", null).body()).contains("\"blockedBy\":[1],\"ouvrable\":true");
     }
 
@@ -123,7 +126,7 @@ class MapTest {
         send("POST", p + "/questions", "{\"titre\":\"B\",\"corps\":\"\",\"type\":\"grilling\",\"blockedBy\":[1]}");
         send("POST", p + "/questions", "{\"titre\":\"C\",\"corps\":\"\",\"type\":\"grilling\",\"blockedBy\":[2]}");
         String qa = jdbc.sql("SELECT id FROM question WHERE titre = 'A' ORDER BY id DESC LIMIT 1").query(String.class).single();
-        long projet = jdbc.sql("SELECT projet_id FROM question WHERE id = ?").param(qa).query(Long.class).single();
+        long projet = jdbc.sql("SELECT projet_id FROM question WHERE id = ?").param(Long.parseLong(qa)).query(Long.class).single();
 
         // A bloquée par C fermerait A → C → B → A.
         HttpResponse<String> r = send("PUT", p + "/questions/" + qa, "{\"titre\":\"A\",\"corps\":\"\",\"type\":\"grilling\",\"blockedBy\":[3]}");

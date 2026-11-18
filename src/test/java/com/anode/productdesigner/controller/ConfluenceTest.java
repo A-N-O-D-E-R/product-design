@@ -2,6 +2,8 @@ package com.anode.productdesigner.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.anode.productdesigner.TestDb;
+
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -74,8 +76,7 @@ class ConfluenceTest {
             }
         });
         faux.start();
-        String dir = Files.createTempDirectory("productdesigner").toString();
-        registry.add("productdesigner.data-dir", () -> dir);
+        TestDb.enregistrer(registry);
         registry.add("anode.confluence.base-url", () -> "http://localhost:" + faux.getAddress().getPort());
         registry.add("anode.confluence.email", () -> "moi@exemple.fr");
         registry.add("anode.confluence.api-token", () -> "secret");

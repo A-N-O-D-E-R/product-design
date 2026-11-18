@@ -20,6 +20,7 @@ Application locale, mono-utilisateur, sans authentification. Vocabulaire du doma
 ## Prérequis
 
 - **Java 25** (ex. `sdk install java 25.0.2-oracle`) et Maven 3.9+.
+- **Docker** : Postgres 17 en développement (`compose.yaml`) et dans les tests (Testcontainers).
 - Node n'est pas requis : le build Maven installe sa propre copie (v20.20) pour construire le front.
 - Un fournisseur LLM : API Anthropic (défaut), OpenAI ou compatible, Amazon Bedrock, ou Ollama en local (voir [Fournisseur LLM](#fournisseur-llm)).
 - Pour l'export, un site Atlassian Cloud, un email et un [token API](https://id.atlassian.com/manage-profile/security/api-tokens) (non scopé). La même config sert à Jira et à Confluence.
@@ -35,6 +36,19 @@ spring:
       api-key: sk-ant-...
       # chat.options.model: claude-opus-5-5   # défaut
 ```
+
+### Base de données
+
+Postgres 17, schéma géré par Flyway (`V1` à `V20`), accès par `JdbcClient`.
+
+- **Développement** : `mvn spring-boot:run` démarre le Postgres de `compose.yaml` (spring-boot-docker-compose) et en branche la
+  datasource ; les données restent dans le volume Docker entre deux lancements.
+- **Ailleurs** : `SPRING_DATASOURCE_URL` (`jdbc:postgresql://hôte:5432/productdesigner`), `SPRING_DATASOURCE_USERNAME`,
+  `SPRING_DATASOURCE_PASSWORD`, et `SPRING_DOCKER_COMPOSE_ENABLED=false`.
+- **Tests** : Testcontainers, une base neuve par classe de test.
+
+> Les données d'une ancienne installation SQLite (`~/.productdesigner/data.db`) ne sont pas migrées : les migrations Flyway ont été
+> réécrites pour Postgres (mêmes versions, dates en `timestamptz`, drapeaux en `boolean`). Une installation existante repart d'une base vide.
 
 ### Sécurité
 
@@ -87,7 +101,7 @@ par recherche). Réglage : `anode.jira.retry.max-retries` (3), `.delay` (1 s), `
 
 | Propriété | Défaut | Rôle |
 |---|---|---|
-| `productdesigner.data-dir` | `~/.productdesigner` | Dossier de la base `data.db` |
+| `spring.datasource.url` / `.username` / `.password` | Postgres du `compose.yaml` en dev | Base Postgres 17 (voir [Base de données](#base-de-données)) |
 | `productdesigner.tarifs.<modèle>` | Opus 5.5, Sonnet 5.5 | $ par million de tokens, pour le coût estimé |
 | `productdesigner.contexte.fenetre` / `.seuil` | `1000000` / `0.8` | Bandeau « Continuer dans une nouvelle Session » |
 | `productdesigner.allowed-users` | vide | Qui peut entrer (voir Sécurité) |
@@ -122,7 +136,7 @@ Spring Boot 4.1, un seul jar, virtual threads
    ├─ ConfluenceService    publication de la Spec dans Confluence v2 (pages en ADF, versions)
    ├─ Atlassian            config absente et messages dédiés pour 401 et 429 persistant (les reprises sont dans les starters)
    ├─ controller ─▶ service ─▶ repository   (une zone = un trio ; seuls les repositories écrivent du SQL)
-   └─ JdbcClient + Flyway ─▶ SQLite (une connexion)
+   └─ JdbcClient + Flyway ─▶ Postgres 17
 ```
 
 - **`record`** : un seul tool, au schéma strict commun à toutes les Méthodes, porte les sorties structurées d'un tour (round, Décisions proposées, Questions, modifications de Map, prototype). Seules les Décisions demandent une confirmation.
@@ -134,7 +148,7 @@ Spring Boot 4.1, un seul jar, virtual threads
 | Chemin | Contenu |
 |---|---|
 | `src/main/java/com/anode/product/designer/` | Backend en 3 couches : `controller` (HTTP et SSE seulement), `service` (règles métier, LLM, Jira, Confluence, transactions), `repository` (tout le SQL, via `JdbcClient`). Une zone = un contrôleur, un service, un repository (Projet, Session, Map, Décision, Spec, Roadmap, Consommation) |
-| `src/main/resources/db/migration/` | Schéma SQLite (Flyway) |
+| `src/main/resources/db/migration/` | Schéma Postgres (Flyway, V1 à V20) |
 | `frontend/src/` | Front en 3 couches comme le backend : `api/` (un module par zone : types + appels REST/SSE, via `client.ts`), `hooks/` (état et actions : `useSession`, `useProjet`, `useDecisions`), `pages/` et `components/` (affichage seulement) |
 | `.scratch/productdesigner-mvp/` | Map de conception, Questions résolues, Spec du MVP, prototype de l'écran de Session |
 | `.scratch/productdesigner-build/` | Roadmap et Tickets d'implémentation, avec notes de réalisation |

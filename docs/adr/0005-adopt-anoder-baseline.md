@@ -26,5 +26,5 @@ reprises sur 429 avec Resilience4j. Les trois autres applications utilisent `spr
 - Il faut la collection 0.2.0 publiée pour construire hors de la machine de développement.
 - Migration de config : `~/.productdesigner/application.yml` doit passer de `anode.atlassian.*` à `anode.jira.*` et
   `anode.confluence.*`.
-- Pas encore fait : SQLite → Postgres + Testcontainers, sécurité par le starter, pnpm / React Query / vitest, OpenAPI,
+- Pas encore fait (au moment de cet ADR) : Postgres (ADR 0007), sécurité (ADR 0006), pnpm / React Query / vitest, OpenAPI,
   Docker et compose, CI via le workflow réutilisable.

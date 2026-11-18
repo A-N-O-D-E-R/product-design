@@ -148,7 +148,7 @@ public class MapRepository {
     }
 
     public void bloquer(long questionId, long parId) {
-        jdbc.sql("INSERT OR IGNORE INTO question_bloquee (question_id, bloquee_par_id) VALUES (?, ?)").params(questionId, parId).update();
+        jdbc.sql("INSERT INTO question_bloquee (question_id, bloquee_par_id) VALUES (?, ?) ON CONFLICT DO NOTHING").params(questionId, parId).update();
     }
 
     /** Vrai si « id bloquée par par » fermerait un cycle : par est elle-même (transitivement) bloquée par id. */

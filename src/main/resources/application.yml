@@ -27,11 +27,9 @@ spring:
       chat:
         options:
           model: claude-opus-5-5
-  datasource:
-    url: jdbc:sqlite:${productdesigner.data-dir:${user.home}/.productdesigner}/data.db?foreign_keys=on&busy_timeout=5000
-    hikari:
-      # ponytail: une seule connexion évite SQLITE_BUSY ; mono-utilisateur, suffisant.
-      maximum-pool-size: 1
+  # Postgres 17. Dev : compose.yaml, démarré par spring-boot-docker-compose avec mvn spring-boot:run, qui branche la datasource.
+  # Ailleurs : SPRING_DATASOURCE_URL, SPRING_DATASOURCE_USERNAME et SPRING_DATASOURCE_PASSWORD (SPRING_DOCKER_COMPOSE_ENABLED=false).
+  docker.compose.lifecycle-management: start-only
 
 # Sécurité (starter de la collection). Poste local : login mock (n'importe quel nom et mot de passe, loopback seulement).
 # Hébergé : PRODUCTDESIGNER_MOCK=false, PRODUCTDESIGNER_OIDC=true et le fournisseur sous

@@ -5,7 +5,8 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.time.Duration;
-import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.Base64;
 import java.util.List;
@@ -42,9 +43,9 @@ public class CleApi implements OpaqueTokenIntrospector {
     /** Autorité des requêtes authentifiées par une clé plutôt que par une session de navigateur. */
     public static final String AUTORITE = "API_KEY";
 
-    public record Creee(String id, String nom, String cle, String expireLe) {}
+    public record Creee(String id, String nom, String cle, OffsetDateTime expireLe) {}
 
-    public record Cle(String id, String nom, String indice, String creePar, String createdAt, String expireLe, String utiliseeLe) {}
+    public record Cle(String id, String nom, String indice, String creePar, OffsetDateTime createdAt, OffsetDateTime expireLe, OffsetDateTime utiliseeLe) {}
 
     private static final SecureRandom ALEA = new SecureRandom();
 
@@ -61,7 +62,7 @@ public class CleApi implements OpaqueTokenIntrospector {
         String alea = Base64.getUrlEncoder().withoutPadding().encodeToString(octets);
         String cle = PREFIXE + alea + somme(alea);
         String id = UUID.randomUUID().toString();
-        String expireLe = Instant.now().plus(duree).truncatedTo(ChronoUnit.SECONDS).toString();
+        OffsetDateTime expireLe = maintenant().plus(duree);
         jdbc.sql("INSERT INTO cle_api (id, nom, hash, indice, cree_par, expire_le) VALUES (?, ?, ?, ?, ?, ?)")
                 .params(id, nom, sha256(cle), cle.substring(0, PREFIXE.length() + 4) + "…", creePar, expireLe).update();
         return new Creee(id, nom, cle, expireLe);
@@ -89,7 +90,7 @@ public class CleApi implements OpaqueTokenIntrospector {
         if (!bienFormee(jeton)) {
             return Optional.empty();
         }
-        String maintenant = maintenant();
+        OffsetDateTime maintenant = maintenant();
         return jdbc.sql("""
                         UPDATE cle_api SET utilisee_le = ?
                         WHERE hash = ? AND revoquee_le IS NULL AND expire_le > ? RETURNING id""")
@@ -106,8 +107,8 @@ public class CleApi implements OpaqueTokenIntrospector {
         return somme(alea).equals(jeton.substring(PREFIXE.length() + 43));
     }
 
-    private static String maintenant() {
-        return Instant.now().truncatedTo(ChronoUnit.SECONDS).toString();
+    private static OffsetDateTime maintenant() {
+        return OffsetDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.MILLIS);
     }
 
     private static String somme(String alea) {
