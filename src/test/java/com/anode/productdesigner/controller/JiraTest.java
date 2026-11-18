@@ -2,6 +2,7 @@ package com.anode.productdesigner.controller;
 
 import com.anode.productdesigner.service.RoadmapService;
 import com.anode.productdesigner.service.Atlassian;
+import com.anode.productdesigner.service.SpecService;
 import com.anode.productdesigner.service.ConfigManquanteException;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -159,8 +160,14 @@ class JiraTest {
 
     long roadmap(String nom) throws Exception {
         String projet = post("/api/projets", "{\"nom\":\"" + nom + "\"}").replaceAll(".*\"id\":(\\d+),.*", "$1");
-        long spec = jdbc.sql("INSERT INTO spec (projet_id, version, contenu) VALUES (?, 1, 'x') RETURNING id").param(Long.parseLong(projet))
-                .query(Long.class).single();
+        // une Spec avec sa section 5 : l'exigence E-1 et ses Décisions sources, que la Story Jira reprend
+        StringBuilder contenu = new StringBuilder("# Spec : " + nom + "\n\n");
+        for (int i = 0; i < SpecService.SOCLE.size(); i++) {
+            contenu.append("## ").append(SpecService.SOCLE.get(i)).append("\n\n")
+                    .append(i == 4 ? "- **E-1** L'utilisateur crée une note [D-2, D-5]\n" : "Non décidé.\n").append("\n");
+        }
+        long spec = jdbc.sql("INSERT INTO spec (projet_id, version, contenu) VALUES (?, 1, ?) RETURNING id")
+                .params(Long.parseLong(projet), contenu.toString()).query(Long.class).single();
         roadmaps.enregistrer(spec, new RoadmapGeneree(List.of(
                 new JalonGenere("Socle", List.of(
                         new TicketGenere("Créer une note", "L'utilisateur **crée** une note.", List.of("La note apparaît"), List.of("E-1"), List.of()),
@@ -191,7 +198,10 @@ class JiraTest {
         String socle = jdbc.sql("SELECT jira_key FROM jalon WHERE spec_id = ? AND titre = 'Socle'").param(spec).query(String.class).single();
         String recherche = jdbc.sql("SELECT jira_key FROM jalon WHERE spec_id = ? AND titre = 'Recherche'").param(spec).query(String.class).single();
         assertThat(bulkReq).contains("\"issuetype\":{\"id\":\"10002\"}", "\"parent\":{\"key\":\"" + socle + "\"}", "\"parent\":{\"key\":\"" + recherche + "\"}",
-                "\"type\":\"doc\"", "\"type\":\"heading\"", "Critères d'acceptation", "\"type\":\"strong\"", "Exigences :");
+                "\"type\":\"doc\"", "\"type\":\"heading\"", "Critères d'acceptation", "\"type\":\"strong\"", "Exigences couvertes");
+        // la chaîne productDesigner → Jira → factory : étiquette `factory` sur les Stories (pas les Epics), exigence avec ses Décisions, provenance
+        assertThat(bulkReq).contains("\"labels\":[\"factory\"]", "L'utilisateur crée une note [D-2, D-5]", "Source : productDesigner, Projet", "Spec v1");
+        assertThat(epics.getFirst()).doesNotContain("labels");
 
         assertThat(jdbc.sql("SELECT count(*) FROM ticket WHERE jira_key IS NOT NULL").query(Integer.class).single()).isGreaterThanOrEqualTo(3);
 
@@ -225,6 +235,9 @@ class JiraTest {
         assertThat(r).contains("\"storiesCreees\":0", "\"orphelines\":[\"" + chercher + " (Chercher)\"]");
         assertThat(requetes).anyMatch(q -> q.startsWith("PUT /rest/api/3/issue/" + lister) && q.contains("\"summary\":\"Lister les notes\"")
                 && q.contains("Liste triée."));
+        // une Story déjà exportée reçoit l'étiquette sans perdre les autres : update.labels.add, pas fields.labels
+        assertThat(requetes).anyMatch(q -> q.startsWith("PUT /rest/api/3/issue/" + lister) && q.contains("\"update\":{\"labels\":[{\"add\":\"factory\"}]}")
+                && !q.contains("\"fields\":{\"labels\""));
         assertThat(requetes).noneMatch(q -> q.startsWith("POST /rest/api/3/issue") || q.contains("DELETE"));
     }
 
