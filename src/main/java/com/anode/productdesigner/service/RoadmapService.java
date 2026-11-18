@@ -245,6 +245,25 @@ public class RoadmapService {
         return numeros;
     }
 
+    /**
+     * Les exigences de la section 5 de la Spec, par numéro : `E-1` → « comportement [D-3, D-7] ». C'est ce que la Story Jira
+     * reprend, pour que l'agent qui la traite ait l'exigence et les Décisions dont elle vient, pas seulement son numéro.
+     */
+    public Map<String, String> exigencesDeLaSpec(long specId) {
+        String spec = contenuSpec(specId);
+        int debut = spec.indexOf("## " + SpecService.SOCLE.get(4));
+        int fin = spec.indexOf("## " + SpecService.SOCLE.get(5));
+        Map<String, String> lignes = new java.util.LinkedHashMap<>();
+        if (debut < 0 || fin < debut) {
+            return lignes;
+        }
+        Matcher m = Pattern.compile("(?m)^\\s*[-*]\\s+\\*\\*(E-\\d+)\\*\\*\\s*(.*)$").matcher(spec.substring(debut, fin));
+        while (m.find()) {
+            lignes.putIfAbsent(m.group(1), m.group(2).strip());
+        }
+        return lignes;
+    }
+
     // --- Édition avant export (E-25) : chaque écriture renvoie la Roadmap à jour ---
 
     public Roadmap renommerJalon(long id, String titre) {

@@ -97,6 +97,13 @@ Reprises : les starters réessaient les 429 (en attendant `Retry-After`) pour to
 requêtes idempotentes (une création dont le résultat est inconnu n'est jamais rejouée à l'aveugle : l'export la retrouve
 par recherche). Réglage : `anode.jira.retry.max-retries` (3), `.delay` (1 s), `.max-delay` (10 s), idem pour `confluence`.
 
+**Vers digital-factory** : les Stories exportées portent l'étiquette `factory` (`productdesigner.jira.label-factory`, vide : aucune ; une
+Story déjà exportée la reçoit au ré-export sans perdre ses autres étiquettes). Leur description reprend le texte et les critères du
+Ticket, puis les **exigences couvertes avec leur texte et leurs Décisions sources** (`E-3 … [D-2, D-5]`, tel que la Spec les écrit) et
+une ligne `Source : productDesigner, Projet …, Spec v…` (avec l'idée d'origine si le Projet vient d'un import). Les liens « Blocks »
+entre Stories donnent l'ordre : la règle d'intake de digital-factory (`labels = factory AND status = "To Do"`) ne prend pas une Story
+tant qu'une bloquante n'est pas terminée.
+
 > Migration : `anode.atlassian.*` (atlassian-springboot-starter) est remplacé par `anode.jira.*` et `anode.confluence.*`.
 
 | Propriété | Défaut | Rôle |
@@ -105,6 +112,7 @@ par recherche). Réglage : `anode.jira.retry.max-retries` (3), `.delay` (1 s), `
 | `productdesigner.tarifs.<modèle>` | Opus 5.5, Sonnet 5.5 | $ par million de tokens, pour le coût estimé |
 | `productdesigner.contexte.fenetre` / `.seuil` | `1000000` / `0.8` | Bandeau « Continuer dans une nouvelle Session » |
 | `productdesigner.allowed-users` | vide | Qui peut entrer (voir Sécurité) |
+| `productdesigner.jira.label-factory` | `factory` | Étiquette des Stories exportées, prise par l'intake de digital-factory |
 | `productdesigner.recherche.tavily-api-key` | vide | Recherche web client de la research, tout fournisseur |
 
 ## Docker

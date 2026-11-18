@@ -11,6 +11,7 @@ import java.util.Set;
 import com.anode.jira.JiraClient;
 import com.anode.jira.JiraDocuments;
 import com.anode.jira.client.model.CreatedIssues;
+import com.anode.jira.client.model.FieldUpdateOperation;
 import com.anode.jira.client.model.IssueBean;
 import com.anode.jira.client.model.IssueLinkType;
 import com.anode.jira.client.model.IssueUpdateDetails;
@@ -18,13 +19,16 @@ import com.anode.jira.client.model.IssuesUpdateBean;
 import com.anode.jira.client.model.LinkIssueRequestJsonBean;
 import com.anode.jira.client.model.LinkedIssue;
 import com.anode.jira.client.model.SearchAndReconcileRequestBean;
+import com.anode.productdesigner.repository.ProjetRepository;
 import com.anode.productdesigner.repository.RoadmapRepository;
 import com.anode.productdesigner.repository.RoadmapRepository.Lien;
+import com.anode.productdesigner.repository.SpecRepository;
 import com.anode.productdesigner.service.RoadmapService.Jalon;
 import com.anode.productdesigner.service.RoadmapService.Roadmap;
 import com.anode.productdesigner.service.RoadmapService.Ticket;
 
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -56,9 +60,15 @@ public class JiraService {
     record Bulk(List<String> cles, Map<Integer, String> erreurs) {}
 
     private final RoadmapRepository repository;
+    private final SpecRepository specs;
+    private final ProjetRepository projets;
     private final RoadmapService roadmaps;
     private final ObjectProvider<JiraClient> jira;
     private final Atlassian atlassian;
+
+    /** Étiquette des Stories : la règle d'intake de digital-factory (`labels = factory AND status = "To Do"`) ne prend qu'elles. Vide : aucune. */
+    @Value("${productdesigner.jira.label-factory:factory}")
+    private String etiquetteFactory = "factory";
 
     public boolean configure() {
         return jira.getIfAvailable() != null;
@@ -79,6 +89,8 @@ public class JiraService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Clé du projet Jira obligatoire.");
         }
         Types types = types(projet);
+        Map<String, String> exigencesSpec = roadmaps.exigencesDeLaSpec(specId);
+        String provenance = provenance(specId);
         Set<Long> jalonsIncertains = repository.jalonsIncertains(specId);
         Set<Long> ticketsIncertains = repository.ticketsIncertains(specId);
 
@@ -95,7 +107,7 @@ public class JiraService {
                 }
             }
             if (cle != null) {
-                misesAJour += maj(echecs, "Jalon « " + j.titre() + " »", cle, Map.of("summary", j.titre()));
+                misesAJour += maj(echecs, "Jalon « " + j.titre() + " »", cle, Map.of("summary", j.titre()), false);
             } else {
                 try {
                     var champs = new IssueUpdateDetails().fields(champs(projet, types.epic(), j.titre(), null, null));
@@ -132,11 +144,11 @@ public class JiraService {
                 }
                 if (cle != null) {
                     // Ré-export (E-28) : titre, description et Epic parent (le Ticket a pu changer de Jalon).
-                    Map<String, Object> champsMaj = new HashMap<>(Map.of("summary", t.titre(), "description", description(t)));
+                    Map<String, Object> champsMaj = new HashMap<>(Map.of("summary", t.titre(), "description", description(t, exigencesSpec, provenance)));
                     if (epic != null) {
                         champsMaj.put("parent", Map.of("key", epic));
                     }
-                    misesAJour += maj(echecs, t.titre(), cle, champsMaj);
+                    misesAJour += maj(echecs, t.titre(), cle, champsMaj, true);
                     continue;
                 }
                 if (epic == null) {
@@ -144,7 +156,11 @@ public class JiraService {
                     continue;
                 }
                 aCreer.add(t);
-                champs.add(champs(projet, types.story(), t.titre(), description(t), epic));
+                Map<String, Object> story = champs(projet, types.story(), t.titre(), description(t, exigencesSpec, provenance), epic);
+                if (!etiquetteFactory.isBlank()) {
+                    story.put("labels", List.of(etiquetteFactory.strip()));
+                }
+                champs.add(story);
             }
         }
         int stories = 0;
@@ -192,9 +208,14 @@ public class JiraService {
         return new Resultat(projet, epics, stories, liens, misesAJour, recuperes, echecs, orphelines);
     }
 
-    private int maj(List<Echec> echecs, String titre, String cle, Map<String, Object> champs) {
+    /** `story` : ajoute l'étiquette factory sans toucher aux autres (`update.labels.add`, pas `fields.labels` qui les remplacerait). */
+    private int maj(List<Echec> echecs, String titre, String cle, Map<String, Object> champs, boolean story) {
         try {
-            atlassian.appel(() -> jira().issues().editIssue(cle, new IssueUpdateDetails().fields(champs), null, null, null, null, null));
+            var details = new IssueUpdateDetails().fields(champs);
+            if (story && !etiquetteFactory.isBlank()) {
+                details.putUpdateItem("labels", List.of(new FieldUpdateOperation().add(etiquetteFactory.strip())));
+            }
+            atlassian.appel(() -> jira().issues().editIssue(cle, details, null, null, null, null, null));
             return 1;
         } catch (ResponseStatusException e) {
             throw e;
@@ -313,12 +334,32 @@ public class JiraService {
         return champs;
     }
 
-    /** Corps du Ticket en ADF, avec les exigences couvertes en pied. */
-    static Map<String, Object> description(Ticket t) {
-        String corps = t.corps();
+    /**
+     * Corps du Ticket en ADF : son texte et ses critères d'acceptation, puis les exigences qu'il couvre avec leur texte et leurs
+     * Décisions sources (`E-3 … [D-2, D-5]`, tels que la Spec les écrit), puis une ligne de provenance. C'est ce que l'agent de
+     * digital-factory lit : un numéro d'exigence seul ne lui dirait rien.
+     */
+    static Map<String, Object> description(Ticket t, Map<String, String> exigencesSpec, String provenance) {
+        StringBuilder corps = new StringBuilder(t.corps() == null ? "" : t.corps());
         if (!t.exigences().isEmpty()) {
-            corps += "\n\n**Exigences :** " + String.join(", ", t.exigences());
+            corps.append("\n\n## Exigences couvertes\n");
+            for (String e : t.exigences()) {
+                String texte = exigencesSpec.get(e);
+                corps.append("\n- **").append(e).append("**").append(texte == null || texte.isBlank() ? "" : " " + texte);
+            }
         }
-        return JiraDocuments.markdown(corps);
+        if (provenance != null && !provenance.isBlank()) {
+            corps.append("\n\n").append(provenance);
+        }
+        return JiraDocuments.markdown(corps.toString());
+    }
+
+    /** « Source : productDesigner, Projet 3 « Nom », Spec v2 » (+ l'idée d'origine) : de la Story jusqu'à l'idée. */
+    private String provenance(long specId) {
+        return specs.pourPublication(specId).map(p -> {
+            String idee = projets.trouver(p.projetId()).map(ProjetRepository.Projet::sourceIdeaUrl).filter(u -> u != null && !u.isBlank())
+                    .map(u -> " ; idée d'origine : " + u).orElse("");
+            return "Source : productDesigner, Projet " + p.projetId() + " « " + p.nom() + " », Spec v" + p.version() + idee;
+        }).orElse("");
     }
 }
