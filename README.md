@@ -38,63 +38,32 @@ spring:
 
 ### Jira et Confluence
 
-Clients fournis par [atlassian-springboot-starter](../atlassian-springboot-starter) (`anode.atlassian.*`). Même compte Atlassian pour les deux. Le token API conseillé est **scopé** (« Create API token with scopes ») ; il passe par la passerelle `api.atlassian.com`, qui demande le `cloudId` du site (`https://<site>.atlassian.net/_edge/tenant_info`) :
+Clients fournis par les starters `spring-boot-starter-jira` et `spring-boot-starter-confluence` de
+[springboot-starter-collection](https://github.com/A-N-O-D-E-R/springboot-starter-collection) (`anode.jira.*` et
+`anode.confluence.*`, même compte Atlassian pour les deux). Le token API conseillé est **scopé** (« Create API token with
+scopes ») ; il passe par la passerelle `api.atlassian.com`, qui demande le `cloudId` du site
+(`https://<site>.atlassian.net/_edge/tenant_info`) :
 
 ```yaml
 anode:
-  atlassian:
+  jira: &atlassian
     base-url: https://<site>.atlassian.net
     email: moi@exemple.fr
     api-token: <token API scopé>
     cloud-id: <cloudId>          # absent : token sans scope, appels directs au site
+  confluence: *atlassian
 ```
+Reprises : les starters réessaient les 429 (en attendant `Retry-After`) pour toute requête, et les 502/503/504 pour les seules
+requêtes idempotentes (une création dont le résultat est inconnu n'est jamais rejouée à l'aveugle : l'export la retrouve
+par recherche). Réglage : `anode.jira.retry.max-retries` (3), `.delay` (1 s), `.max-delay` (10 s), idem pour `confluence`.
 
-Scopes minimaux :
-
-| Produit | Scopes |
-|---|---|
-| Jira | `read:jira-work`, `write:jira-work` |
-| Confluence | `read:space:confluence`, `read:page:confluence`, `write:page:confluence` |
-
-Un token expire au bout d'un an au plus ; l'app affiche alors « Token Jira expiré ou invalide ».
-
-### Fournisseur LLM
-
-Via [Spring AI](https://docs.spring.io/spring-ai/reference/) : `spring.ai.model.chat` choisit le fournisseur, ses réglages suivent les propriétés Spring AI (`spring.ai.<fournisseur>.*`).
-
-```yaml
-spring:
-  ai:
-    model:
-      chat: anthropic          # anthropic (défaut) | openai | bedrock-converse | ollama
-    openai:                    # OpenAI, ou toute API compatible via base-url
-      api-key: sk-...
-      chat.options.model: gpt-5
-    bedrock:
-      aws:
-        region: eu-west-1
-        profile.name: mon-profil-aws   # profil SSO compris (aws sso login --profile mon-profil-aws)
-      converse.chat.options.model: eu.anthropic.claude-opus-5-5-v1:0
-    ollama:
-      base-url: http://localhost:11434
-      chat.options.model: qwen3
-```
-
-Le modèle doit savoir appeler des outils : le tool `record` porte les sorties structurées de chaque tour. Sur Bedrock, la chaîne AWS standard s'applique sans profil (variables `AWS_*`, `~/.aws/config`, rôle d'instance).
-
-Ce qui dépend du fournisseur :
-- **Recherche web** (Méthode research) : avec `productdesigner.recherche.tavily-api-key` (clé [Tavily](https://tavily.com), payante au-delà du quota gratuit), l'app exécute elle-même l'outil `web_search`, sur tout fournisseur. Sans clé, seule l'API Anthropic en a une (recherche serveur) ; ailleurs une Question *research* ne peut pas être ouverte.
-- **Effort et prompt caching** : réglés pour Anthropic seulement ; les autres fournisseurs gardent leurs défauts (`spring.ai.<fournisseur>.chat.options.*`, dont `max-tokens`).
-- **Coût estimé** : `productdesigner.tarifs.<modèle>` ne connaît que les prix de l'API Anthropic ; un autre modèle s'affiche « inconnu » sans entrée de tarif.
-
-Sans fournisseur LLM configuré, l'app démarre et affiche un bandeau ; sans config Jira, l'export l'indique. Autres réglages (valeurs par défaut dans [`src/main/resources/application.yml`](src/main/resources/application.yml), surchargeables au même endroit) :
+> Migration : `anode.atlassian.*` (atlassian-springboot-starter) est remplacé par `anode.jira.*` et `anode.confluence.*`.
 
 | Propriété | Défaut | Rôle |
 |---|---|---|
 | `productdesigner.data-dir` | `~/.productdesigner` | Dossier de la base `data.db` |
 | `productdesigner.tarifs.<modèle>` | Opus 5.5, Sonnet 5.5 | $ par million de tokens, pour le coût estimé |
 | `productdesigner.contexte.fenetre` / `.seuil` | `1000000` / `0.8` | Bandeau « Continuer dans une nouvelle Session » |
-| `productdesigner.jira.backoff-ms` | `2000` | Base du backoff sur un 429 Jira |
 | `productdesigner.recherche.tavily-api-key` | vide | Recherche web client de la research, tout fournisseur |
 
 ## Lancer
@@ -122,9 +91,9 @@ Spring Boot 4.1, un seul jar, virtual threads
    ├─ Llm (Spring AI)      streaming, tool `record`, sortie structurée ; Anthropic, OpenAI, Bedrock, Ollama
    │                       (effort, prompt caching et recherche serveur sur Anthropic)
    ├─ Recherche            outil web_search exécuté par l'app (Tavily), tout fournisseur
-   ├─ JiraService          export Roadmap vers Jira v3 (bulk, ADF), via atlassian-springboot-starter
+   ├─ JiraService          export Roadmap vers Jira v3 (bulk, ADF), via spring-boot-starter-jira
    ├─ ConfluenceService    publication de la Spec dans Confluence v2 (pages en ADF, versions)
-   ├─ Atlassian            config absente, 401, reprises sur 429 (Retry-After) pour les deux
+   ├─ Atlassian            config absente et messages dédiés pour 401 et 429 persistant (les reprises sont dans les starters)
    ├─ controller ─▶ service ─▶ repository   (une zone = un trio ; seuls les repositories écrivent du SQL)
    └─ JdbcClient + Flyway ─▶ SQLite (une connexion)
 ```
