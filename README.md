@@ -168,3 +168,28 @@ Décisions prises après la Spec du MVP : [`docs/adr/`](docs/adr/).
 ## Licences
 
 Les fichiers de Méthode et le prompt de Roadmap sont adaptés de [mattpocock/skills](https://github.com/mattpocock/skills), sous licence MIT ; voir [`LICENSES/mattpocock-skills.txt`](LICENSES/mattpocock-skills.txt). Ce projet n'est ni affilié à son auteur ni approuvé par lui.
+
+## Importer une idée d'idea-generator
+
+`POST /api/projets/import` prend l'`idea.json` d'idea-generator (contrat `idea-brief.schema.json`, copie de
+`digital-factory/factory-contracts` : le garder synchronisé) et amorce un Projet et sa Map :
+
+| idea.json | productDesigner |
+|---|---|
+| `brief.name`, `brief.oneLiner` | nom et description du Projet |
+| `brief.problem` | Destination de la Map |
+| `brief.audience`, `mvp`, `stack`, `firstSteps` | notes de la Map |
+| `brief.openQuestions` | Questions (grilling, ouvertes) |
+| `brief.outOfScope` | Hors périmètre |
+| `brief.risks`, `research.riskFactors`, `research.hypotheses` | Brouillard |
+| `research` (ai-scientist) | artefact `research_md` d'une Session research close |
+| `lineage[].sourceUrl` (ou `?source=`) | `projet.source_idea_url`, provenance en JSON dans `projet.source_idea` |
+
+```sh
+curl -X POST 'http://localhost:8080/api/projets/import?source=https://ideas.example.org/boards/7/ideas/42' \
+  -H 'Content-Type: application/json' --data @idea.json
+curl -X POST http://localhost:8080/api/projets/import -F file=@idea.json      # ou en fichier
+```
+
+201 avec les compteurs ; 422 si l'idea.json ne respecte pas le schéma (les violations sont dans le message) ; 409 si
+la même source est déjà importée.
