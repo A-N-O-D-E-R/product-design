@@ -107,6 +107,20 @@ par recherche). Réglage : `anode.jira.retry.max-retries` (3), `.delay` (1 s), `
 | `productdesigner.allowed-users` | vide | Qui peut entrer (voir Sécurité) |
 | `productdesigner.recherche.tavily-api-key` | vide | Recherche web client de la research, tout fournisseur |
 
+## Docker
+
+```sh
+docker compose -f deploy/compose.yaml up -d --build      # app + Postgres, login mock, http://127.0.0.1:8080
+```
+`deploy/compose.yaml` publie le port sur `127.0.0.1` seul : le login mock n'a pas de mot de passe (`productdesigner.mock-publie-en-local`,
+sans quoi le démarrage refuse d'écouter sur `0.0.0.0` avec le login mock). Hébergé : OIDC (voir [Sécurité](#sécurité)). L'image est
+construite par le CI (`ghcr.io/a-n-o-d-e-r/productdesigner`).
+
+## Contrat de l'API
+
+`/api/openapi.json` (OpenAPI 3.1, derrière la connexion). `OpenApiTest` le compare à `src/test/resources/openapi.json` : un
+changement d'API fait échouer le test ; relire le diff puis régénérer avec `UPDATE_OPENAPI=1 mvn test -Dtest=OpenApiTest`.
+
 ## Lancer
 
 ```sh

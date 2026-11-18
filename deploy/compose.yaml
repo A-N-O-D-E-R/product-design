@@ -1,0 +1,39 @@
+# productDesigner sur un poste (login mock, port publié en local seulement) :
+#   docker compose -f deploy/compose.yaml up -d --build      puis http://127.0.0.1:8080
+# Le port est publié sur 127.0.0.1 seul : le login mock n'a pas de mot de passe, ne jamais changer ce mapping.
+# Hébergé : retirer le login mock, mettre PRODUCTDESIGNER_OIDC=true et le fournisseur (voir le README, « Sécurité »).
+# La clé du fournisseur LLM : ANTHROPIC_API_KEY dans un fichier .env à côté de ce fichier (ou un autre fournisseur, voir le README).
+services:
+  app:
+    image: ghcr.io/a-n-o-d-e-r/productdesigner:latest
+    build: ..
+    depends_on:
+      db: {condition: service_healthy}
+    ports: ["127.0.0.1:8080:8080"]
+    environment:
+      PRODUCTDESIGNER_MOCK: "true"
+      PRODUCTDESIGNER_OIDC: "false"
+      PRODUCTDESIGNER_MOCK_PUBLIE_EN_LOCAL: "true"
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/productdesigner
+      SPRING_DATASOURCE_USERNAME: productdesigner
+      SPRING_DATASOURCE_PASSWORD: productdesigner
+      SPRING_AI_ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      # Export Jira et Confluence (voir le README) :
+      # ANODE_JIRA_BASE_URL: https://<site>.atlassian.net
+      # ANODE_JIRA_EMAIL: moi@exemple.fr
+      # ANODE_JIRA_API_TOKEN: ...
+      # ANODE_CONFLUENCE_BASE_URL / _EMAIL / _API_TOKEN : idem
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: productdesigner
+      POSTGRES_USER: productdesigner
+      POSTGRES_PASSWORD: productdesigner
+    volumes: [db-data:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U productdesigner"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+volumes:
+  db-data:
