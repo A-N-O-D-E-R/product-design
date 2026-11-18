@@ -184,21 +184,22 @@
         <version>1.15.1</version>
         <configuration>
           <workingDirectory>frontend</workingDirectory>
-          <nodeVersion>v20.20.0</nodeVersion>
+          <nodeVersion>v22.23.1</nodeVersion>
+          <pnpmVersion>10.20.0</pnpmVersion>
         </configuration>
         <executions>
           <execution>
-            <id>install-node-and-npm</id>
-            <goals><goal>install-node-and-npm</goal></goals>
+            <id>install-node-and-pnpm</id>
+            <goals><goal>install-node-and-pnpm</goal></goals>
           </execution>
           <execution>
-            <id>npm-ci</id>
-            <goals><goal>npm</goal></goals>
-            <configuration><arguments>ci</arguments></configuration>
+            <id>pnpm-install</id>
+            <goals><goal>pnpm</goal></goals>
+            <configuration><arguments>install --frozen-lockfile</arguments></configuration>
           </execution>
           <execution>
-            <id>npm-build</id>
-            <goals><goal>npm</goal></goals>
+            <id>pnpm-build</id>
+            <goals><goal>pnpm</goal></goals>
             <phase>generate-resources</phase>
             <configuration><arguments>run build</arguments></configuration>
           </execution>

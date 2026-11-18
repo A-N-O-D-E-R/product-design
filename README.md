@@ -21,7 +21,7 @@ Application locale, mono-utilisateur, sans authentification. Vocabulaire du doma
 
 - **Java 25** (ex. `sdk install java 25.0.2-oracle`) et Maven 3.9+.
 - **Docker** : Postgres 17 en développement (`compose.yaml`) et dans les tests (Testcontainers).
-- Node n'est pas requis : le build Maven installe sa propre copie (v20.20) pour construire le front.
+- Node n'est pas requis : le build Maven installe sa propre copie (Node 22 et pnpm 10) pour construire le front.
 - Un fournisseur LLM : API Anthropic (défaut), OpenAI ou compatible, Amazon Bedrock, ou Ollama en local (voir [Fournisseur LLM](#fournisseur-llm)).
 - Pour l'export, un site Atlassian Cloud, un email et un [token API](https://id.atlassian.com/manage-profile/security/api-tokens) (non scopé). La même config sert à Jira et à Confluence.
 
@@ -158,9 +158,9 @@ java -jar target/productdesigner-0.2.0.jar   # avec SPRING_DATASOURCE_URL/USERNA
 
 Puis http://localhost:8080. Le jar contient le front ; les migrations Flyway s'appliquent au premier lancement sur la base Postgres indiquée.
 
-**Développement** : `mvn spring-boot:run` pour le backend (port 8080) et `npm run dev` dans `frontend/` (le serveur Vite relaie `/api`).
+**Développement** : `mvn spring-boot:run` pour le backend (port 8080) et `pnpm dev` dans `frontend/` (le serveur Vite relaie `/api`).
 
-**Tests** : `mvn test` (ajouter `-Dskip.npm -Dskip.installnodenpm` pour ne pas rebuilder le front). Ils tournent contre de faux serveurs (Anthropic, OpenAI, Tavily, Jira, Confluence), sans appel réseau, et contre un vrai Postgres (Testcontainers, Docker requis).
+**Tests** : `mvn test` (ajouter `-Dskip.pnpm -Dskip.installnodepnpm` pour ne pas rebuilder le front). Ils tournent contre de faux serveurs (Anthropic, OpenAI, Tavily, Jira, Confluence), sans appel réseau, et contre un vrai Postgres (Testcontainers, Docker requis).
 
 ## Architecture
 
