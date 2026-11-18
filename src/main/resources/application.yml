@@ -1,11 +1,10 @@
 server:
-  # Mono-utilisateur sans authentification (D-3) : jamais exposé au réseau.
-  address: 127.0.0.1
+  # Loopback par défaut : le login mock (sans mot de passe) l'exige. Pour servir d'autres machines : HOST=0.0.0.0 avec OIDC.
+  address: ${HOST:127.0.0.1}
 
 spring:
-  web:
-    error:
-      include-message: always
+  # Erreurs en RFC 9457 (application/problem+json) : le message est dans `detail`.
+  mvc.problemdetails.enabled: true
   application:
     name: productdesigner
   config:
@@ -34,7 +33,19 @@ spring:
       # ponytail: une seule connexion évite SQLITE_BUSY ; mono-utilisateur, suffisant.
       maximum-pool-size: 1
 
+# Sécurité (starter de la collection). Poste local : login mock (n'importe quel nom et mot de passe, loopback seulement).
+# Hébergé : PRODUCTDESIGNER_MOCK=false, PRODUCTDESIGNER_OIDC=true et le fournisseur sous
+# spring.security.oauth2.client.registration.oidc.* / provider.oidc.issuer-uri (voir README).
+anode:
+  security:
+    mock: ${PRODUCTDESIGNER_MOCK:true}
+    env-oidc: ${PRODUCTDESIGNER_OIDC:false}
+    # Le front statique et la page de login sont publics ; seul /api demande une connexion (config/Securite).
+    # Le login mock fait sa propre page : l'app n'a pas de /login.
+
 productdesigner:
+  # Qui peut entrer, séparés par des virgules : nom d'utilisateur, ou e-mail vérifié d'OIDC. Vide : tout compte connecté.
+  allowed-users: ${PRODUCTDESIGNER_ALLOWED_USERS:}
   # Recherche web de la research sur tout fournisseur (outil client) : clé API Tavily. Sans clé, seule l'API Anthropic
   # en a une (recherche serveur) ; ailleurs la research est refusée.
   recherche:

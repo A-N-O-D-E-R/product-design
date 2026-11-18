@@ -363,30 +363,6 @@ class SessionTest {
     }
 
     @Test
-    void requeteDepuisUnAutreSiteRefusee() throws Exception {
-        for (String origine : new String[] {"https://evil.example", "http://localhost.evil.example"}) {
-            HttpResponse<String> r = HttpClient.newHttpClient().send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/projets"))
-                    .header("Origin", origine).header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString("{\"nom\":\"csrf\"}")).build(), HttpResponse.BodyHandlers.ofString());
-            assertThat(r.statusCode()).as(origine).isEqualTo(403);
-        }
-        HttpResponse<String> local = HttpClient.newHttpClient().send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/projets"))
-                .header("Origin", "http://localhost:5173").header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString("{\"nom\":\"vite\"}")).build(), HttpResponse.BodyHandlers.ofString());
-        assertThat(local.statusCode()).isEqualTo(201);
-        assertThat(send("GET", "/api/projets", null)).doesNotContain("csrf");
-    }
-
-    @Test
-    void requeteDepuisUneIframeSandboxRefusee() throws Exception {
-        HttpResponse<String> r = HttpClient.newHttpClient().send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/projets"))
-                .header("Origin", "null").header("Content-Type", "text/plain")
-                .POST(HttpRequest.BodyPublishers.ofString("{\"nom\":\"pirate\"}")).build(), HttpResponse.BodyHandlers.ofString());
-        assertThat(r.statusCode()).isEqualTo(403);
-        assertThat(send("GET", "/api/projets", null)).doesNotContain("pirate");
-    }
-
-    @Test
     void genererLaSpecDepuisLaMapEtLesDecisions() throws Exception {
         String projetId = send("POST", "/api/projets", "{\"nom\":\"Spec\"}").replaceAll(".*\"id\":(\\d+),.*", "$1");
         String p = "/api/projets/" + projetId;

@@ -36,6 +36,32 @@ spring:
       # chat.options.model: claude-opus-5-5   # défaut
 ```
 
+### Sécurité
+
+Starter de sécurité de la collection (`anode.security.*`). Seul `/api/**` demande une connexion : le front statique et la page
+de login sont publics, l'API répond `401` en `application/problem+json` (RFC 9457) sans connexion, et les écritures demandent le
+jeton CSRF (cookie `XSRF-TOKEN` renvoyé en `X-XSRF-TOKEN`, ce que fait le front).
+
+| Usage | Configuration |
+|---|---|
+| **Poste local** (défaut) | login *mock* : n'importe quel nom et mot de passe. `anode.security.mock: true` ; le serveur doit écouter en loopback (`server.address` = 127.0.0.1) et `Host` doit être local (DNS rebinding) : sinon le démarrage échoue |
+| **Hébergé** | `PRODUCTDESIGNER_MOCK=false`, `PRODUCTDESIGNER_OIDC=true`, `HOST=0.0.0.0`, et le fournisseur : `spring.security.oauth2.client.registration.oidc.{client-id,client-secret,scope}` + `provider.oidc.issuer-uri` (plusieurs fournisseurs : une `registration` chacun) |
+| Qui entre | `productdesigner.allowed-users` (nom, ou e-mail vérifié d'OIDC, séparés par des virgules). Vide : tout compte connecté. Avec OIDC seulement : le login mock donne à tous la même identité |
+
+> L'application n'a **pas de données par utilisateur** : tout compte autorisé voit tous les Projets. Hébergée avec un
+> fournisseur public (GitHub, Google), renseigner `allowed-users`.
+
+**Clés d'API** pour les autres applications (idea-generator → `POST /api/projets/import`) : sans session ni CSRF, en
+`Authorization: Bearer pd_...`.
+
+```sh
+# connecté dans le navigateur : créer une clé (affichée une seule fois)
+curl -X POST $BASE/api/cles-api -H 'Content-Type: application/json' -d '{"nom":"idea-generator","jours":90}'
+curl -X POST $BASE/api/projets/import -H "Authorization: Bearer pd_..." -H 'Content-Type: application/json' --data @idea.json
+```
+10 clés actives au plus, 1 à 365 jours, seul le SHA-256 est stocké, `DELETE /api/cles-api/{id}` révoque. Une clé ne gère pas les
+clés (session de navigateur seulement).
+
 ### Jira et Confluence
 
 Clients fournis par les starters `spring-boot-starter-jira` et `spring-boot-starter-confluence` de
@@ -64,6 +90,7 @@ par recherche). Réglage : `anode.jira.retry.max-retries` (3), `.delay` (1 s), `
 | `productdesigner.data-dir` | `~/.productdesigner` | Dossier de la base `data.db` |
 | `productdesigner.tarifs.<modèle>` | Opus 5.5, Sonnet 5.5 | $ par million de tokens, pour le coût estimé |
 | `productdesigner.contexte.fenetre` / `.seuil` | `1000000` / `0.8` | Bandeau « Continuer dans une nouvelle Session » |
+| `productdesigner.allowed-users` | vide | Qui peut entrer (voir Sécurité) |
 | `productdesigner.recherche.tavily-api-key` | vide | Recherche web client de la research, tout fournisseur |
 
 ## Lancer
