@@ -1,6 +1,6 @@
 # 0002 — Claude in Amazon Bedrock comme second fournisseur
 
-Date : 2026-11-03 · Statut : acceptée · Complète : D-2, D-24
+Date : 2026-11-03 · Statut : remplacée par [0004](0004-claude-code-cli.md) · Complète : D-2, D-24
 
 ## Contexte
 

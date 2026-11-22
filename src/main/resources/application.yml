@@ -13,6 +13,13 @@ spring:
   threads:
     virtual:
       enabled: true
+  ai:
+    # CLI Claude Code (spring-ai-claude-code-starter). Auth : token saisi dans l'interface, sinon `claude login` local.
+    claude-code:
+      executable: claude
+      model: opus
+      timeout: 30m
+      max-turns: 40
   datasource:
     url: jdbc:sqlite:${productdesigner.data-dir:${user.home}/.productdesigner}/data.db?foreign_keys=on&busy_timeout=5000
     hikari:

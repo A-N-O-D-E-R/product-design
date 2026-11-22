@@ -9,6 +9,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -26,42 +27,47 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
-/** Sessions de bout en bout contre un faux serveur Anthropic qui rejoue des streams préparés. */
+/**
+ * Sessions de bout en bout : le CLI Claude Code est remplacé par un script qui transmet prompt et arguments à un faux
+ * serveur, lequel rejoue des sorties stream-json préparées.
+ */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class SessionTest {
 
-    static HttpServer fauxAnthropic;
+    static HttpServer fauxClaude;
+    /** Chaque appel : arguments du CLI (un par ligne), puis le prompt reçu sur stdin. */
     static final List<String> requetes = new CopyOnWriteArrayList<>();
     static final Queue<String> reponses = new ConcurrentLinkedQueue<>();
-
-    static String event(String type, String json) {
-        return "event: " + type + "\ndata: " + json + "\n\n";
-    }
 
     static String json(String texte) {
         return texte.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n");
     }
 
-    /** Stream d'un message : un bloc texte, puis éventuellement un appel record. */
-    static String stream(String texte, String recordInput) {
-        StringBuilder sb = new StringBuilder(event("message_start", """
-                {"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","model":"claude-opus-5-5","content":[],"stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":10,"output_tokens":1}}}"""));
-        sb.append(event("content_block_start", "{\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}"));
-        int moitie = texte.length() / 2;
-        for (String morceau : List.of(texte.substring(0, moitie), texte.substring(moitie))) {
-            sb.append(event("content_block_delta", "{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"" + json(morceau) + "\"}}"));
+    /** Événements stream-json d'un texte (en deux deltas), sans la ligne result. */
+    static String deltas(String texte) {
+        StringBuilder sb = new StringBuilder("{\"type\":\"system\",\"subtype\":\"init\"}\n");
+        if (!texte.isEmpty()) {
+            sb.append("{\"type\":\"stream_event\",\"event\":{\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}}\n");
+            int moitie = texte.length() / 2;
+            for (String morceau : List.of(texte.substring(0, moitie), texte.substring(moitie))) {
+                sb.append("{\"type\":\"stream_event\",\"event\":{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"")
+                        .append(json(morceau)).append("\"}}}\n");
+            }
         }
-        sb.append(event("content_block_stop", "{\"type\":\"content_block_stop\",\"index\":0}"));
-        if (recordInput != null) {
-            sb.append(event("content_block_start", "{\"type\":\"content_block_start\",\"index\":1,\"content_block\":{\"type\":\"tool_use\",\"id\":\"toolu_1\",\"name\":\"record\",\"input\":{}}}"));
-            String partial = recordInput.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n");
-            sb.append(event("content_block_delta", "{\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"" + partial + "\"}}"));
-            sb.append(event("content_block_stop", "{\"type\":\"content_block_stop\",\"index\":1}"));
-        }
-        String stop = recordInput == null ? "end_turn" : "tool_use";
-        sb.append(event("message_delta", "{\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"" + stop + "\",\"stop_sequence\":null},\"usage\":{\"output_tokens\":5}}"));
-        sb.append(event("message_stop", "{\"type\":\"message_stop\"}"));
         return sb.toString();
+    }
+
+    /** Sortie d'un appel : le texte streamé, puis le result (10 tokens en entrée, 5 en sortie) avec la sortie structurée. */
+    static String stream(String texte, String structure) {
+        return deltas(texte) + "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"result\":\"" + json(texte)
+                + "\",\"session_id\":\"s\",\"usage\":{\"input_tokens\":10,\"output_tokens\":5,\"cache_read_input_tokens\":0,"
+                + "\"cache_creation_input_tokens\":0,\"server_tool_use\":{\"web_search_requests\":0}},\"modelUsage\":{\"claude-opus-5-5\":{}}"
+                + (structure == null ? "" : ",\"structured_output\":" + structure.replace("\n", "")) + "}\n";
+    }
+
+    /** Échec du CLI : result en erreur, code de sortie 1. */
+    static String erreur(String message) {
+        return "ERREUR {\"type\":\"result\",\"subtype\":\"success\",\"is_error\":true,\"result\":\"" + json(message) + "\"}\n";
     }
 
     static final String ROUND = """
@@ -69,9 +75,10 @@ class SessionTest {
 
     @DynamicPropertySource
     static void config(DynamicPropertyRegistry registry) throws Exception {
-        fauxAnthropic = HttpServer.create(new InetSocketAddress("localhost", 0), 0);
-        fauxAnthropic.createContext("/v1/messages", exchange -> {
-            requetes.add(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+        fauxClaude = HttpServer.create(new InetSocketAddress("localhost", 0), 0);
+        fauxClaude.createContext("/claude", exchange -> {
+            String args = new String(java.util.Base64.getDecoder().decode(exchange.getRequestHeaders().getFirst("X-Args")), StandardCharsets.UTF_8);
+            requetes.add(args + "\n" + new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
             String reponse = reponses.poll();
             if (reponse == null) {
                 reponse = stream("Rien.", null);
@@ -85,36 +92,34 @@ class SessionTest {
                 }
                 reponse = reponse.substring(5);
             }
-            if (reponse.startsWith("HTTP ")) {
-                // "HTTP <code> <corps JSON>" : erreur de l'API.
-                String[] parts = reponse.split(" ", 3);
-                byte[] body = parts[2].getBytes(StandardCharsets.UTF_8);
-                exchange.getResponseHeaders().add("Content-Type", "application/json");
-                exchange.sendResponseHeaders(Integer.parseInt(parts[1]), body.length);
-                exchange.getResponseBody().write(body);
-            } else {
-                // "COUPE <sse>" : stream tronqué, la connexion se ferme avant message_stop.
-                boolean coupe = reponse.startsWith("COUPE ");
-                byte[] body = (coupe ? reponse.substring(6) : reponse).getBytes(StandardCharsets.UTF_8);
-                exchange.getResponseHeaders().add("Content-Type", "text/event-stream");
-                exchange.sendResponseHeaders(200, coupe ? 0 : body.length);
-                exchange.getResponseBody().write(body);
-            }
+            // "ERREUR <sortie>" ou "COUPE <sortie>" : le CLI sort en code 1 (erreur, ou sortie tronquée sans result).
+            int code = reponse.startsWith("ERREUR ") || reponse.startsWith("COUPE ") ? 500 : 200;
+            byte[] body = (code == 200 ? reponse : reponse.substring(reponse.indexOf(' ') + 1)).getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(code, body.length);
+            exchange.getResponseBody().write(body);
             exchange.close();
         });
-        fauxAnthropic.start();
-        String dir = Files.createTempDirectory("productdesigner").toString();
-        registry.add("productdesigner.data-dir", () -> dir);
-        registry.add("productdesigner.anthropic.api-key", () -> "test");
-        // Faux serveur : 10 tokens en entrée, soit 10 % d'une fenêtre de 100 ; seuil abaissé à 5 %.
+        fauxClaude.start();
+        Path dir = Files.createTempDirectory("productdesigner");
+        Path stub = dir.resolve("claude");
+        Files.writeString(stub, """
+                #!/bin/sh
+                corps=$(mktemp)
+                code=$(curl -s -o "$corps" -w '%%{http_code}' --data-binary @- -H "X-Args: $(printf '%%s\\n' "$@" | base64 -w0)" http://localhost:%d/claude)
+                cat "$corps"; rm -f "$corps"
+                [ "$code" = 200 ]
+                """.formatted(fauxClaude.getAddress().getPort()));
+        stub.toFile().setExecutable(true);
+        registry.add("productdesigner.data-dir", dir::toString);
+        registry.add("spring.ai.claude-code.executable", stub::toString);
+        // Faux CLI : 10 tokens en entrée, soit 10 % d'une fenêtre de 100 ; seuil abaissé à 5 %.
         registry.add("productdesigner.contexte.fenetre", () -> "100");
         registry.add("productdesigner.contexte.seuil", () -> "0.05");
-        registry.add("productdesigner.anthropic.base-url", () -> "http://localhost:" + fauxAnthropic.getAddress().getPort());
     }
 
     @AfterAll
     static void stop() {
-        fauxAnthropic.stop(0);
+        fauxClaude.stop(0);
     }
 
     @BeforeEach
@@ -142,7 +147,7 @@ class SessionTest {
     }
 
     @Test
-    void roundStreamePuisReponseRenvoieLeToolResult() throws Exception {
+    void roundStreamePuisHistoriqueRejoueAvecLeRecord() throws Exception {
         String id = nouvelleSession();
         reponses.add(stream("Bonjour, voici Q1.", ROUND));
 
@@ -150,8 +155,10 @@ class SessionTest {
         assertThat(sse).contains("event:delta", "Bonjour, ", "voici Q1.", "event:record", "\"recommandation\":\"Les devs\"", "event:fin");
         assertThat(sse).doesNotContain("avertissement");
         assertThat(requetes).hasSize(1);
-        assertThat(requetes.get(0)).contains("\"name\":\"record\"", "arbre de décisions",
-                "Champs utilisés par cette Méthode : round, decision", "\"cache_control\"", "Une idée");
+        assertThat(requetes.get(0)).contains("--json-schema", "\"prototype_html\"", "--system-prompt", "arbre de décisions",
+                "Champs utilisés par cette Méthode : round, decision", "Une idée", "--setting-sources", "--strict-mcp-config");
+        // Aucun outil : ni Bash, ni fichiers, ni web.
+        assertThat(requetes.get(0)).contains("--tools\n\n").doesNotContain("WebSearch");
         assertThat(requetes.get(0)).doesNotContain("Matt Pocock");
 
         assertThat(send("GET", "/api/sessions/" + id, null))
@@ -160,10 +167,10 @@ class SessionTest {
         reponses.add(stream("Noté.", ROUND));
         send("POST", "/api/sessions/" + id + "/messages", "{\"texte\":\"Q1: Les devs\"}");
         String second = requetes.get(1);
-        // Historique rejoué dans l'ordre ; le message suivant un record commence par son tool_result.
+        // Historique rejoué en texte dans l'ordre, record compris.
         assertThat(second.indexOf("Salut")).isLessThan(second.indexOf("voici Q1."));
-        assertThat(second).contains("{\"tool_use_id\":\"toolu_1\",\"type\":\"tool_result\"");
-        assertThat(second.indexOf("\"tool_use_id\":\"toolu_1\"")).isLessThan(second.indexOf("Q1: Les devs"));
+        assertThat(second).contains("<record>{\"round\":{\"questions\":[{\"id\":\"Q1\"");
+        assertThat(second.indexOf("<record>")).isLessThan(second.indexOf("Q1: Les devs"));
     }
 
     @Test
@@ -294,31 +301,15 @@ class SessionTest {
         assertThat(requetes.getLast()).doesNotContain("Historique à ne pas reprendre");
     }
 
-    /** Stream d'une recherche web serveur interrompue par pause_turn. */
-    static String streamPause() {
-        return event("message_start", """
-                {"type":"message_start","message":{"id":"msg_p","type":"message","role":"assistant","model":"claude-opus-5-5","content":[],"stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":10,"output_tokens":1}}}""")
-                + event("content_block_start", """
-                {"type":"content_block_start","index":0,"content_block":{"type":"server_tool_use","id":"srvtoolu_1","name":"web_search","input":{}}}""")
-                + event("content_block_delta", """
-                {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{\\"query\\":\\"jira api\\"}"}}""")
-                + event("content_block_stop", "{\"type\":\"content_block_stop\",\"index\":0}")
-                + event("content_block_start", """
-                {"type":"content_block_start","index":1,"content_block":{"type":"web_search_tool_result","tool_use_id":"srvtoolu_1","content":[{"type":"web_search_result","url":"https://developer.atlassian.com","title":"Jira","encrypted_content":"ENC-SECRET-123","page_age":null}]}}""")
-                + event("content_block_stop", "{\"type\":\"content_block_stop\",\"index\":1}")
-                + event("message_delta", "{\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"pause_turn\",\"stop_sequence\":null},\"usage\":{\"output_tokens\":5}}")
-                + event("message_stop", "{\"type\":\"message_stop\"}");
-    }
-
     @Test
-    void researchEnTacheDeFondAvecPauseTurn() throws Exception {
+    void researchEnTacheDeFondAvecRechercheWeb() throws Exception {
         String projetId = send("POST", "/api/projets", "{\"nom\":\"R\"}").replaceAll(".*\"id\":(\\d+),.*", "$1");
         String p = "/api/projets/" + projetId;
         String carte = send("POST", p + "/questions", "{\"titre\":\"API Jira\",\"corps\":\"Comment créer un Epic ?\",\"type\":\"research\",\"blockedBy\":[]}");
         String q = carte.replaceAll(".*\"questions\":\\[\\{\"id\":(\\d+),.*", "$1");
-        reponses.add(streamPause());
-        reponses.add(stream("# Rapport Jira\n\nUtiliser le champ parent.", """
-                {"round":{"questions":[]},"decisions":[{"texte":"Lier les Stories par parent"}],"questions":[],"map":{"destination":"","brouillard":[],"hors_perimetre":[]}}"""));
+        reponses.add(stream("Je cherche.\n\n# Rapport Jira\n\nUtiliser le champ parent.", """
+                {"round":{"questions":[]},"decisions":[{"texte":"Lier les Stories par parent"}],"questions":[],"map":{"destination":"","brouillard":[],"hors_perimetre":[]}}""")
+                .replace("\"web_search_requests\":0", "\"web_search_requests\":1"));
 
         String session = send("POST", p + "/questions/" + q + "/sessions", null);
         assertThat(session).contains("\"methode\":\"research\"", "\"tache\":\"en_cours\"");
@@ -330,13 +321,11 @@ class SessionTest {
             detail = send("GET", "/api/sessions/" + id, null);
         }
         assertThat(detail).contains("\"tache\":\"terminee\"", "1 recherche(s) web");
-        assertThat(requetes).hasSize(2);
-        assertThat(requetes.get(0)).contains("\"type\":\"web_search_20260209\"", "sources primaires", "Comment créer un Epic ?");
-        // Le tour relancé après pause_turn renvoie le résultat chiffré tel quel.
-        assertThat(requetes.get(1)).contains("\"encrypted_content\":\"ENC-SECRET-123\"", "srvtoolu_1");
+        assertThat(requetes).hasSize(1);
+        assertThat(requetes.get(0)).contains("--tools\nWebSearch", "--allowedTools\nWebSearch", "sources primaires", "Comment créer un Epic ?");
 
         assertThat(send("GET", "/api/sessions/" + id + "/artefacts", null))
-                .contains("\"type\":\"research_md\"", "# Rapport Jira", "champ parent");
+                .contains("\"type\":\"research_md\"", "# Rapport Jira", "champ parent").doesNotContain("Je cherche");
         assertThat(send("GET", "/api/sessions/" + id + "/decisions", null)).contains("Lier les Stories par parent");
     }
 
@@ -420,11 +409,11 @@ class SessionTest {
                   {"titre":"Créer une note","corps":"L'utilisateur crée une note.","criteres":["La note apparaît"],"exigences":["E-1"],"blockedBy":[]},
                   {"titre":"Lister les notes","corps":"Liste.","criteres":["Tri par date"],"exigences":["E-2","E-9"],"blockedBy":["Créer une note"]}
                 ]}]}""".replace("\n", "");
-        reponses.add(stream(roadmap, null));
+        reponses.add(stream("Je découpe.", roadmap));
         String sse = send("POST", "/api/specs/" + specId + "/roadmap", null);
         assertThat(sse).contains("event:progression", "event:fin", "2 Tickets (attendu : 3 à 10)",
                 "exigences absentes de la Spec : E-9", "Exigences non couvertes : E-3.");
-        assertThat(requetes.getLast()).contains("\"json_schema\"", "\"effort\":\"high\"", "vertical slice", "- **E-3** Exporter");
+        assertThat(requetes.getLast()).contains("--json-schema", "\"blockedBy\"", "vertical slice", "- **E-3** Exporter");
 
         String lue = send("GET", "/api/specs/" + specId + "/roadmap", null);
         assertThat(lue).contains("\"version\":1", "\"titre\":\"Socle\"", "\"titre\":\"Créer une note\"",
@@ -433,7 +422,7 @@ class SessionTest {
         assertThat(lue).contains("\"blockedBy\":[" + premier + "]");
 
         // Régénérer remplace l'ensemble.
-        reponses.add(stream(roadmap.replace("Socle", "Socle v2"), null));
+        reponses.add(stream("", roadmap.replace("Socle", "Socle v2")));
         send("POST", "/api/specs/" + specId + "/roadmap", null);
         assertThat(send("GET", "/api/specs/" + specId + "/roadmap", null)).contains("Socle v2").doesNotContain("\"titre\":\"Socle\"");
     }
@@ -456,30 +445,18 @@ class SessionTest {
     }
 
     @Test
-    void pauseTurnGereeDansUneSessionInteractive() throws Exception {
-        String projet = send("POST", "/api/projets", "{\"nom\":\"Pause\"}").replaceAll(".*\"id\":(\\d+),.*", "$1");
-        String id = send("POST", "/api/projets/" + projet + "/sessions", "{\"methode\":\"research\"}").replaceAll(".*?\"id\":(\\d+),.*", "$1");
-        reponses.add(streamPause());
-        reponses.add(stream("Voilà la suite.", ROUND));
-        String sse = send("POST", "/api/sessions/" + id + "/messages", "{\"texte\":\"Cherche encore\"}");
-        assertThat(requetes).hasSize(2);
-        assertThat(requetes.get(1)).contains("ENC-SECRET-123");
-        assertThat(sse).contains("event:record").doesNotContain("avertissement");
-    }
-
-    @Test
     void roadmapRegenereeEnEchecNeDetruitPasLAncienne() throws Exception {
         String projetId = send("POST", "/api/projets", "{\"nom\":\"Atomique\"}").replaceAll(".*\"id\":(\\d+),.*", "$1");
         reponses.add(stream("# Spec\n", null));
         send("POST", "/api/projets/" + projetId + "/specs", null);
         String specId = send("GET", "/api/projets/" + projetId + "/specs", null).replaceAll(".*?\"id\":(\\d+),.*", "$1");
         String ok = "{\"jalons\":[{\"titre\":\"Ancien\",\"tickets\":[{\"titre\":\"T\",\"corps\":\"c\",\"criteres\":[],\"exigences\":[],\"blockedBy\":[]}]}]}";
-        reponses.add(stream(ok, null));
+        reponses.add(stream("", ok));
         send("POST", "/api/specs/" + specId + "/roadmap", null);
 
         // 2e Jalon sans titre : NOT NULL violé à mi-parcours.
         String casse = "{\"jalons\":[{\"titre\":\"Nouveau\",\"tickets\":[]},{\"titre\":null,\"tickets\":[]}]}";
-        reponses.add(stream(casse, null));
+        reponses.add(stream("", casse));
         assertThat(send("POST", "/api/specs/" + specId + "/roadmap", null)).contains("event:erreur");
         assertThat(send("GET", "/api/specs/" + specId + "/roadmap", null)).contains("\"titre\":\"Ancien\"").doesNotContain("Nouveau");
     }
@@ -504,16 +481,10 @@ class SessionTest {
     void reessayableCalculeSurLHistoriqueMasque() throws Exception {
         String id = nouvelleSession();
         assertThat(send("GET", "/api/sessions/" + id, null)).contains("\"reessayable\":false");
-        // Texte sans record, puis la relance masquée échoue (3 x 500 : appel + 2 retries du SDK).
-        reponses.add(stream("Texte seul.", null));
-        String erreur500 = "HTTP 500 {\"type\":\"error\",\"error\":{\"type\":\"api_error\",\"message\":\"boom\"}}";
-        reponses.add(erreur500);
-        reponses.add(erreur500);
-        reponses.add(erreur500);
-        assertThat(send("POST", "/api/sessions/" + id + "/messages", "{\"texte\":\"Salut\"}")).contains("event:erreur", "\"reessayable\":true");
-        // Dernier message visible : la réponse de Claude ; mais l'historique finit par la relance masquée.
-        String detail = send("GET", "/api/sessions/" + id, null);
-        assertThat(detail).contains("\"texte\":\"Texte seul.\"", "\"reessayable\":true");
+        reponses.add(erreur("API Error: 500 boom"));
+        assertThat(send("POST", "/api/sessions/" + id + "/messages", "{\"texte\":\"Salut\"}")).contains("event:erreur", "boom", "\"reessayable\":true");
+        // L'historique finit par le message de l'utilisateur, sans réponse.
+        assertThat(send("GET", "/api/sessions/" + id, null)).contains("\"texte\":\"Salut\"", "\"reessayable\":true");
         reponses.add(stream("Voilà.", ROUND));
         assertThat(send("POST", "/api/sessions/" + id + "/reessayer", null)).contains("event:record");
         assertThat(send("GET", "/api/sessions/" + id, null)).contains("\"reessayable\":false");
@@ -537,20 +508,6 @@ class SessionTest {
         assertThat(gros).contains("Négociable ?", "Oui : structurés", long_.strip()).doesNotContain("ingr\\n");
     }
 
-    @Test
-    void recordIncompletRelanceUneFoisAvecLesErreurs() throws Exception {
-        String id = nouvelleSession();
-        reponses.add(stream("Voici le round.", """
-                {"round":{"questions":[{"id":"Q1","titre":"Cible","corps":"Pour qui ? Ma recommandation : les devs."}]},"decisions":[],"questions":[],"map":{}}"""));
-        reponses.add(stream("", ROUND));
-        String sse = send("POST", "/api/sessions/" + id + "/messages", "{\"texte\":\"Salut\"}");
-        assertThat(requetes).hasSize(2);
-        assertThat(requetes.get(1)).contains("ne respecte pas le schéma", "round.questions[1].recommandation vide ou absent",
-                "{\"tool_use_id\":\"toolu_1\",\"type\":\"tool_result\"");
-        assertThat(sse).contains("event:record", "\"recommandation\":\"Les devs\"").doesNotContain("avertissement");
-        assertThat(send("GET", "/api/sessions/" + id, null)).doesNotContain("ne respecte pas le schéma");
-    }
-
     @Autowired
     SessionController sessions;
 
@@ -563,7 +520,6 @@ class SessionTest {
         String p = "/api/projets/" + projetId;
         String carte = send("POST", p + "/questions", "{\"titre\":\"Fait à trouver\",\"corps\":\"\",\"type\":\"research\",\"blockedBy\":[]}");
         String q = carte.replaceAll(".*\"questions\":\\[\\{\"id\":(\\d+),.*", "$1");
-        reponses.add(streamPause());
         reponses.add(stream("Encore une pause ?", null));
         String id = send("POST", p + "/questions/" + q + "/sessions", null).replaceAll(".*?\"id\":(\\d+),.*", "$1");
         attendreFin(id);
@@ -578,7 +534,7 @@ class SessionTest {
         assertThat(send("POST", "/api/sessions/" + id + "/relancer", null)).contains("\"tache\":\"en_cours\"");
         assertThat(attendreFin(id)).contains("\"tache\":\"terminee\"");
         // Repart de zéro : seule la consigne, sans les messages de la tentative ratée.
-        assertThat(requetes.getFirst()).contains(SessionController.RESEARCH).doesNotContain("ENC-SECRET-123", "Encore une pause");
+        assertThat(requetes.getFirst()).contains(SessionController.RESEARCH).doesNotContain("Encore une pause");
         assertThat(send("POST", "/api/sessions/" + id + "/relancer", null)).contains("Seule une research en échec");
         assertThat(jdbc.sql("SELECT count(*) FROM artefact WHERE session_id = ?").param(id).query(Integer.class).single()).isEqualTo(1);
     }
@@ -615,7 +571,7 @@ class SessionTest {
     void streamCoupeGardeLePartielPuisReessayerSansLui() throws Exception {
         String id = nouvelleSession();
         String complet = stream("Début de réponse, puis la suite.", ROUND);
-        reponses.add("COUPE " + complet.substring(0, complet.indexOf("event: content_block_stop")));
+        reponses.add("COUPE " + complet.substring(0, complet.indexOf("{\"type\":\"result\"")));
 
         String sse = send("POST", "/api/sessions/" + id + "/messages", "{\"texte\":\"Salut\"}");
         assertThat(sse).contains("event:delta", "event:erreur", "Réponse interrompue", "\"reessayable\":true");
@@ -630,44 +586,22 @@ class SessionTest {
     }
 
     @Test
-    void cleInvalideMessageClair() throws Exception {
+    void nonAuthentifieMessageClair() throws Exception {
         String id = nouvelleSession();
-        reponses.add("HTTP 401 {\"type\":\"error\",\"error\":{\"type\":\"authentication_error\",\"message\":\"invalid x-api-key\"}}");
+        reponses.add(erreur("Not logged in · Please run /login"));
         assertThat(send("POST", "/api/sessions/" + id + "/messages", "{\"texte\":\"Salut\"}"))
-                .contains("event:erreur", "Clé Anthropic invalide");
+                .contains("event:erreur", "Claude Code n'est pas authentifié", "claude setup-token");
         assertThat(requetes).hasSize(1);
     }
 
     @Test
-    void surchargeRetenteeParLeSdk() throws Exception {
-        String id = nouvelleSession();
-        reponses.add("HTTP 529 {\"type\":\"error\",\"error\":{\"type\":\"overloaded_error\",\"message\":\"Overloaded\"}}");
-        reponses.add(stream("Ça passe.", ROUND));
-        assertThat(send("POST", "/api/sessions/" + id + "/messages", "{\"texte\":\"Salut\"}"))
-                .contains("asse.", "event:record").doesNotContain("event:erreur");
-        assertThat(requetes).hasSize(2);
-    }
-
-    @Test
-    void sansRecordUneRelanceMasqueePuisAvertissement() throws Exception {
+    void sansRecordAvertissement() throws Exception {
         String id = nouvelleSession();
         reponses.add(stream("Texte seul.", null));
-        reponses.add(stream("Toujours rien.", null));
 
         String sse = send("POST", "/api/sessions/" + id + "/messages", "{\"texte\":\"Salut\"}");
-        assertThat(requetes).hasSize(2);
-        assertThat(requetes.get(1)).contains(Record.RELANCE);
+        assertThat(requetes).hasSize(1);
         assertThat(sse).contains("event:avertissement", "Réponse non structurée", "event:fin");
-        assertThat(send("GET", "/api/sessions/" + id, null)).doesNotContain("Appelle maintenant");
     }
 
-    @Test
-    void relanceReussieDonneLeRound() throws Exception {
-        String id = nouvelleSession();
-        reponses.add(stream("Texte seul.", null));
-        reponses.add(stream("Voilà.", ROUND));
-
-        String sse = send("POST", "/api/sessions/" + id + "/messages", "{\"texte\":\"Salut\"}");
-        assertThat(sse).contains("event:record", "\"titre\":\"Cible\"").doesNotContain("avertissement");
-    }
 }

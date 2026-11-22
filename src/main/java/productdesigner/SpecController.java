@@ -1,6 +1,7 @@
 package productdesigner;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -11,11 +12,6 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-import com.anthropic.core.http.StreamResponse;
-import com.anthropic.helpers.MessageAccumulator;
-import com.anthropic.models.messages.MessageCreateParams;
-import com.anthropic.models.messages.OutputConfig;
-import com.anthropic.models.messages.RawMessageStreamEvent;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -51,17 +47,17 @@ class SpecController {
     record Version(long id, int version, String createdAt) {}
 
     private final JdbcClient jdbc;
-    private final Anthropic anthropic;
+    private final Claude claude;
     private final MapController map;
     private final DecisionController decisions;
     private final Consommation consommation;
     private final String prompt;
 
-    SpecController(JdbcClient jdbc, Anthropic anthropic, MapController map, DecisionController decisions, Consommation consommation)
+    SpecController(JdbcClient jdbc, Claude claude, MapController map, DecisionController decisions, Consommation consommation)
             throws IOException {
         this.jdbc = jdbc;
         this.consommation = consommation;
-        this.anthropic = anthropic;
+        this.claude = claude;
         this.map = map;
         this.decisions = decisions;
         this.prompt = new ClassPathResource("prompts/spec.md").getContentAsString(StandardCharsets.UTF_8);
@@ -86,35 +82,23 @@ class SpecController {
     SseEmitter generer(@PathVariable long projetId) {
         String nom = jdbc.sql("SELECT nom FROM projet WHERE id = ?").param(projetId).query(String.class).optional()
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Projet introuvable."));
-        var client = anthropic.client();
         String destination = map.carte(projetId).destination();
-        MessageCreateParams params = MessageCreateParams.builder()
-                .model(anthropic.model())
-                .maxTokens(64000L)
-                .outputConfig(OutputConfig.builder().effort(OutputConfig.Effort.HIGH).build())
-                .system(prompt)
-                .addUserMessage("Projet : " + nom + "\n\nDestination : " + (destination.isBlank() ? "non fixée" : destination)
-                        + "\n\n" + map.resume(projetId))
-                .build();
+        String demande = "Projet : " + nom + "\n\nDestination : " + (destination.isBlank() ? "non fixée" : destination)
+                + "\n\n" + map.resume(projetId);
         Set<Integer> numeros = decisions.confirmees(projetId).stream().map(DecisionController.Decision::numero).collect(Collectors.toSet());
 
         SseEmitter emitter = new SseEmitter(0L);
         Thread.ofVirtual().start(() -> {
             try {
-                MessageAccumulator accumulator = MessageAccumulator.create();
-                try (StreamResponse<RawMessageStreamEvent> stream = client.messages().createStreaming(params)) {
-                    for (RawMessageStreamEvent event : (Iterable<RawMessageStreamEvent>) stream.stream()::iterator) {
-                        accumulator.accumulate(event);
-                        var delta = event.contentBlockDelta().flatMap(d -> d.delta().text());
-                        if (delta.isPresent()) {
-                            emitter.send(SseEmitter.event().name("delta").data(Map.of("texte", delta.get().text())));
-                        }
+                var resultat = claude.appeler(prompt, demande, null, false, t -> {
+                    try {
+                        emitter.send(SseEmitter.event().name("delta").data(Map.of("texte", t)));
+                    } catch (IOException e) {
+                        throw new UncheckedIOException(e);
                     }
-                }
-                consommation.enregistrer(projetId, "spec", anthropic.model(), accumulator.message().usage());
-                String texte = accumulator.message().content().stream().flatMap(b -> b.text().stream()).map(t -> t.text())
-                        .reduce("", String::concat);
-                String contenu = normaliser(texte);
+                });
+                consommation.enregistrer(projetId, "spec", Claude.usage(resultat));
+                String contenu = normaliser(resultat.text());
                 List<String> avertissements = verifier(contenu, numeros);
                 var spec = jdbc.sql("""
                                 INSERT INTO spec (projet_id, version, contenu)

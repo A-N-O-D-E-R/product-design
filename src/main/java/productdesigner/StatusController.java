@@ -8,17 +8,17 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 class StatusController {
 
-    private final Anthropic anthropic;
+    private final Claude claude;
+    private final ClaudeToken token;
 
-    StatusController(Anthropic anthropic) {
-        this.anthropic = anthropic;
+    StatusController(Claude claude, ClaudeToken token) {
+        this.claude = claude;
+        this.token = token;
     }
 
+    /** token : état du token saisi dans l'interface ; sans token, le CLI utilise la connexion locale de Claude Code. */
     @GetMapping("/api/status")
     Map<String, Object> status() {
-        return anthropic.configured()
-                ? Map.of("anthropic", true, "fournisseur", anthropic.fournisseur(), "model", anthropic.model(),
-                        "rechercheWeb", anthropic.rechercheWeb())
-                : Map.of("anthropic", false, "message", Anthropic.CLE_ABSENTE);
+        return Map.of("model", claude.model(), "token", token.etat());
     }
 }

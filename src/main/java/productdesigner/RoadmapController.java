@@ -1,6 +1,7 @@
 package productdesigner;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -11,13 +12,7 @@ import java.util.TreeSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import com.anthropic.core.http.StreamResponse;
-import com.anthropic.helpers.MessageAccumulator;
-import com.anthropic.models.messages.MessageCreateParams;
-import com.anthropic.models.messages.OutputConfig;
-import com.anthropic.models.messages.RawMessageStreamEvent;
-import com.anthropic.models.messages.StructuredMessageCreateParams;
-import com.fasterxml.jackson.annotation.JsonPropertyDescription;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -49,12 +44,23 @@ class RoadmapController {
 
     record JalonGenere(String titre, List<TicketGenere> tickets) {}
 
-    record TicketGenere(
-            @JsonPropertyDescription("Titre court, unique dans toute la Roadmap") String titre,
-            @JsonPropertyDescription("Comportement de bout en bout rendu possible, du point de vue de l'utilisateur") String corps,
-            List<String> criteres,
-            @JsonPropertyDescription("Numéros des exigences couvertes, ex. E-3") List<String> exigences,
-            @JsonPropertyDescription("Titres exacts des Tickets prérequis") List<String> blockedBy) {}
+    record TicketGenere(String titre, String corps, List<String> criteres, List<String> exigences, List<String> blockedBy) {}
+
+    private static final ObjectMapper JSON = new ObjectMapper();
+
+    /** Schéma JSON de RoadmapGeneree, passé au CLI en --json-schema. */
+    static final String SCHEMA = """
+            {"type":"object","additionalProperties":false,"required":["jalons"],"properties":{"jalons":{"type":"array","items":{
+              "type":"object","additionalProperties":false,"required":["titre","tickets"],"properties":{
+                "titre":{"type":"string"},
+                "tickets":{"type":"array","items":{"type":"object","additionalProperties":false,
+                  "required":["titre","corps","criteres","exigences","blockedBy"],"properties":{
+                    "titre":{"type":"string","description":"Titre court, unique dans toute la Roadmap"},
+                    "corps":{"type":"string","description":"Comportement de bout en bout rendu possible, du point de vue de l'utilisateur"},
+                    "criteres":{"type":"array","items":{"type":"string"}},
+                    "exigences":{"type":"array","items":{"type":"string"},"description":"Numéros des exigences couvertes, ex. E-3"},
+                    "blockedBy":{"type":"array","items":{"type":"string"},"description":"Titres exacts des Tickets prérequis"}}}}}}}}}
+            """;
 
     // --- Lecture ---
 
@@ -76,16 +82,16 @@ class RoadmapController {
     private record Bloc(long ticketId, long parId) {}
 
     private final JdbcClient jdbc;
-    private final Anthropic anthropic;
+    private final Claude claude;
     private final TransactionTemplate transaction;
     private final Consommation consommation;
     private final String prompt;
 
-    RoadmapController(JdbcClient jdbc, Anthropic anthropic, PlatformTransactionManager transactions, Consommation consommation)
+    RoadmapController(JdbcClient jdbc, Claude claude, PlatformTransactionManager transactions, Consommation consommation)
             throws IOException {
         this.jdbc = jdbc;
         this.consommation = consommation;
-        this.anthropic = anthropic;
+        this.claude = claude;
         this.transaction = new TransactionTemplate(transactions);
         this.prompt = new ClassPathResource("prompts/roadmap.md").getContentAsString(StandardCharsets.UTF_8)
                 .replaceAll("(?s)<!--.*?-->", "").strip();
@@ -128,41 +134,24 @@ class RoadmapController {
         String spec = jdbc.sql("SELECT contenu FROM spec WHERE id = ?").param(specId).query(String.class).optional()
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Spec introuvable."));
         long projet = jdbc.sql("SELECT projet_id FROM spec WHERE id = ?").param(specId).query(Long.class).single();
-        var client = anthropic.client();
-        StructuredMessageCreateParams<RoadmapGeneree> params = MessageCreateParams.builder()
-                .model(anthropic.model())
-                .maxTokens(64000L)
-                .system(prompt)
-                .addUserMessage("Spec :\n\n" + spec)
-                .outputConfig(RoadmapGeneree.class)
-                .build();
-        // Effort dans le même output_config que le format structuré.
-        params = params.toBuilder().outputConfig(OutputConfig.builder()
-                .format(params.rawParams().outputConfig().orElseThrow().format().orElseThrow())
-                .effort(OutputConfig.Effort.HIGH).build()).build();
-        StructuredMessageCreateParams<RoadmapGeneree> requete = params;
-
         SseEmitter emitter = new SseEmitter(0L);
         Thread.ofVirtual().start(() -> {
             try {
-                MessageAccumulator accumulator = MessageAccumulator.create();
-                int caracteres = 0;
-                try (StreamResponse<RawMessageStreamEvent> stream = client.messages().createStreaming(requete)) {
-                    for (RawMessageStreamEvent event : (Iterable<RawMessageStreamEvent>) stream.stream()::iterator) {
-                        accumulator.accumulate(event);
-                        var delta = event.contentBlockDelta().flatMap(d -> d.delta().text());
-                        if (delta.isPresent()) {
-                            caracteres += delta.get().text().length();
-                            emitter.send(SseEmitter.event().name("progression").data(Map.of("caracteres", caracteres)));
-                        }
+                int[] caracteres = {0};
+                var resultat = claude.appeler(prompt, "Spec :\n\n" + spec, SCHEMA, false, t -> {
+                    caracteres[0] += t.length();
+                    try {
+                        emitter.send(SseEmitter.event().name("progression").data(Map.of("caracteres", caracteres[0])));
+                    } catch (IOException e) {
+                        throw new UncheckedIOException(e);
                     }
-                }
-                consommation.enregistrer(projet, "roadmap", anthropic.model(), accumulator.message().usage());
-                RoadmapGeneree roadmap = accumulator.message(RoadmapGeneree.class).content().stream()
-                        .flatMap(b -> b.text().stream()).findFirst().orElseThrow().text();
+                });
+                consommation.enregistrer(projet, "roadmap", Claude.usage(resultat));
+                RoadmapGeneree roadmap = resultat.structuredOutput() == null ? new RoadmapGeneree(null)
+                        : JSON.treeToValue(resultat.structuredOutput(), RoadmapGeneree.class);
                 if (roadmap.jalons() == null || roadmap.jalons().stream().allMatch(j -> j.tickets() == null || j.tickets().isEmpty())) {
                     // Sortie inexploitable : l'ancienne Roadmap (et ses éditions) reste en place.
-                    log.warn("Roadmap sans Ticket pour la Spec {} ; sortie brute : {}", specId, accumulator.message().content());
+                    log.warn("Roadmap sans Ticket pour la Spec {} ; sortie brute : {}", specId, resultat.raw());
                     throw new IllegalStateException("la Roadmap générée ne contient aucun Ticket ; Roadmap existante conservée");
                 }
                 // Appel depuis ce thread, hors proxy Spring : la transaction est explicite (tout ou rien).

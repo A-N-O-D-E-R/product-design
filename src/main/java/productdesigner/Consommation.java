@@ -54,12 +54,11 @@ class Consommation {
     }
 
     /** Enregistre l'usage d'un appel hors Session. */
-    void enregistrer(long projetId, String objet, String modele, com.anthropic.models.messages.Usage usage) {
+    void enregistrer(long projetId, String objet, Claude.Usage usage) {
         jdbc.sql("""
                         INSERT INTO appel (projet_id, objet, modele, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens)
                         VALUES (?, ?, ?, ?, ?, ?, ?)""")
-                .params(projetId, objet, modele, usage.inputTokens(), usage.outputTokens(),
-                        usage.cacheReadInputTokens().orElse(0L), usage.cacheCreationInputTokens().orElse(0L))
+                .params(projetId, objet, usage.modele(), usage.input(), usage.output(), usage.cacheRead(), usage.cacheWrite())
                 .update();
     }
 

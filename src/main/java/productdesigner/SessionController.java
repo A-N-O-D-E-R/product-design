@@ -1,6 +1,7 @@
 package productdesigner;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -9,27 +10,11 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import com.anthropic.client.AnthropicClient;
-import com.anthropic.core.ObjectMappers;
-import com.anthropic.core.http.StreamResponse;
-import com.anthropic.errors.BadRequestException;
-import com.anthropic.errors.NotFoundException;
-import com.anthropic.errors.PermissionDeniedException;
-import com.anthropic.errors.UnauthorizedException;
-import com.anthropic.helpers.MessageAccumulator;
-import com.anthropic.models.messages.CacheControlEphemeral;
-import com.anthropic.models.messages.ContentBlockParam;
-import com.anthropic.models.messages.Message;
-import com.anthropic.models.messages.MessageCreateParams;
-import com.anthropic.models.messages.MessageParam;
-import com.anthropic.models.messages.OutputConfig;
-import com.anthropic.models.messages.RawMessageStreamEvent;
-import com.anthropic.models.messages.StopReason;
-import com.anthropic.models.messages.TextBlockParam;
-import com.anthropic.models.messages.ToolResultBlockParam;
-import com.anthropic.models.messages.WebSearchTool20260209;
+import com.anode.ai.claude.ClaudeCodeException;
+import com.anode.ai.claude.ClaudeCodeResult;
+import com.anode.ai.claude.ClaudeCodeTimeoutException;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.json.JsonMapper;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -49,13 +34,12 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
-import software.amazon.awssdk.core.exception.SdkClientException;
 
 @RestController
 class SessionController {
 
     private static final Logger log = LoggerFactory.getLogger(SessionController.class);
-    private static final JsonMapper JSON = ObjectMappers.jsonMapper();
+    private static final ObjectMapper JSON = new ObjectMapper();
 
     /** questionId et question (titre) : null pour la Session qui trace la Map. */
     /** tache, progression : null hors Sessions research (D-26). */
@@ -73,7 +57,7 @@ class SessionController {
 
     record NouvelleSession(String methode) {}
 
-    // round : Map/List simples, car Spring sérialise avec Jackson 3 et le SDK fournit du Jackson 2.
+    // round : Map/List simples, car Spring sérialise avec Jackson 3 et le starter Claude Code fournit du Jackson 2.
     record Affichage(long id, String role, String texte, Object round, boolean incomplet) {}
 
     /** reessayable : la Session attend une réponse au dernier message de l'utilisateur, masqué ou non (E-34) ; une research en échec se relance plutôt. */
@@ -84,7 +68,7 @@ class SessionController {
     private record Ligne(long id, String role, String contenu, boolean visible, boolean incomplet) {}
 
     private final JdbcClient jdbc;
-    private final Anthropic anthropic;
+    private final Claude claude;
     private final Methodes methodes;
     private final MapController map;
     /** Sessions dont une réponse est en cours de stream. */
@@ -92,11 +76,11 @@ class SessionController {
     private final long fenetre;
     private final double seuil;
 
-    SessionController(JdbcClient jdbc, Anthropic anthropic, Methodes methodes, MapController map,
+    SessionController(JdbcClient jdbc, Claude claude, Methodes methodes, MapController map,
                       @Value("${productdesigner.contexte.fenetre:1000000}") long fenetre,
                       @Value("${productdesigner.contexte.seuil:0.8}") double seuil) {
         this.jdbc = jdbc;
-        this.anthropic = anthropic;
+        this.claude = claude;
         this.methodes = methodes;
         this.map = map;
         this.fenetre = fenetre;
@@ -125,33 +109,27 @@ class SessionController {
 
     static final String RESEARCH = "Mène la recherche sur la Question à résoudre, puis rédige le rapport final.";
 
-    /** Pauses serveur (pause_turn) relancées au plus : au-delà, la research échoue. */
-    private static final int PAUSES_MAX = 10;
-
-    /** Recherches web par appel (max_uses). */
-    private static final long RECHERCHES_MAX = 15;
-
     /**
-     * Research en tâche de fond (D-26) : rend la main tout de suite, écrit sa progression en base. Chaque pause_turn
-     * est relancée avec l'historique tel quel (blocs encrypted_content compris). Le dernier message donne l'Artefact.
+     * Research en tâche de fond (D-26) : rend la main tout de suite, écrit sa progression en base. Le CLI mène
+     * lui-même ses recherches web ; le texte de l'appel donne l'Artefact.
      */
-    void research(AnthropicClient client, Session session) {
+    void research(Session session) {
         long id = session.id();
         Thread.ofVirtual().start(() -> {
             try {
-                int[] recherches = {0};
-                List<Message> messages = tourComplet(client, session, t -> {}, () -> progression(id,
-                        "Recherche en cours : " + recherches[0] + " recherche(s) web…"));
-                messages.forEach(m -> recherches[0] += recherches(m));
-                String rapport = rapport(messages);
+                progression(id, "Recherche web en cours…");
+                ClaudeCodeResult resultat = tour(session, t -> {});
+                String rapport = rapport(resultat.text());
                 if (rapport.isEmpty()) {
                     throw new IllegalStateException("aucun rapport rédigé");
                 }
-                Message dernier = messages.getLast();
-                Record.appel(dernier).ifPresent(a -> map.appliquer(session.projetId(), Record.input(a)));
+                if (resultat.structuredOutput() != null) {
+                    map.appliquer(session.projetId(), resultat.structuredOutput());
+                }
+                long recherches = resultat.raw().path("usage").path("server_tool_use").path("web_search_requests").asLong();
                 jdbc.sql("INSERT INTO artefact (session_id, type, contenu) VALUES (?, 'research_md', ?)").params(id, rapport).update();
                 jdbc.sql("UPDATE session SET tache = 'terminee', progression = ? WHERE id = ?")
-                        .params("Terminée : " + recherches[0] + " recherche(s) web.", id).update();
+                        .params("Terminée : " + recherches + " recherche(s) web.", id).update();
             } catch (Throwable e) {
                 log.warn("Échec de la research de la Session {}", id, e);
                 echec(id, e instanceof Exception ex ? messageErreur(ex) : "Erreur interne : " + e);
@@ -172,12 +150,10 @@ class SessionController {
     }
 
     /**
-     * Rapport de research : texte de tout le tour (il peut avoir été rédigé à cheval sur une pause_turn), à partir
-     * du dernier titre `# ` pour écarter les messages intermédiaires ; tout le texte s'il n'y a pas de titre.
+     * Rapport de research : texte de tout l'appel (entrecoupé de recherches web), à partir du dernier titre `# `
+     * pour écarter les messages intermédiaires ; tout le texte s'il n'y a pas de titre.
      */
-    static String rapport(List<Message> messages) {
-        String texte = messages.stream().flatMap(m -> m.content().stream()).flatMap(b -> b.text().stream()).map(t -> t.text())
-                .reduce("", String::concat);
+    static String rapport(String texte) {
         Matcher titre = Pattern.compile("(?m)^# ").matcher(texte);
         int debut = -1;
         while (titre.find()) {
@@ -209,7 +185,6 @@ class SessionController {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "Des Décisions de cette research sont déjà confirmées : clore la Session plutôt que la relancer.");
         }
-        var client = anthropic.client();
         jdbc.sql("DELETE FROM message WHERE session_id = ? AND id > (SELECT min(id) FROM message WHERE session_id = ?)")
                 .params(id, id).update();
         jdbc.sql("DELETE FROM artefact WHERE session_id = ?").param(id).update();
@@ -217,14 +192,10 @@ class SessionController {
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
-                research(client, session(id));
+                research(session(id));
             }
         });
         return session(id);
-    }
-
-    private static int recherches(Message message) {
-        return (int) message.content().stream().filter(b -> b.webSearchToolResult().isPresent()).count();
     }
 
     private void progression(long id, String texte) {
@@ -260,20 +231,16 @@ class SessionController {
         }
         String methode = methode(type);
         methodes.get(methode);
-        if (methode.equals("research") && !anthropic.rechercheWeb()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, Anthropic.SANS_RECHERCHE_WEB);
-        }
         jdbc.sql("UPDATE question SET statut = 'claimed' WHERE id = ?").param(questionId).update();
         long id = jdbc.sql("INSERT INTO session (projet_id, methode, question_id) VALUES (?, ?, ?) RETURNING id")
                 .params(projetId, methode, questionId).query(Long.class).single();
         if (methode.equals("research")) {
-            var client = anthropic.client();
             jdbc.sql("UPDATE session SET tache = 'en_cours', progression = 'Démarrage…' WHERE id = ?").param(id).update();
-            enregistrer(id, "user", MessageParam.ofUser(RESEARCH), false);
+            enregistrer(id, utilisateur(RESEARCH), false);
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override
                 public void afterCommit() {
-                    research(client, session(id));
+                    research(session(id));
                 }
             });
         }
@@ -344,11 +311,10 @@ class SessionController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Message vide.");
         }
         Session session = active(id);
-        var client = anthropic.client();
         reserver(id);
         try {
-            enregistrer(id, "user", messageUtilisateur(id, nouveau.texte().strip()), true);
-            return repondre(client, session);
+            enregistrer(id, utilisateur(nouveau.texte().strip()), true);
+            return repondre(session);
         } catch (RuntimeException e) {
             repondent.remove(id);
             throw e;
@@ -359,54 +325,35 @@ class SessionController {
     @PostMapping("/api/sessions/{id}/reessayer")
     SseEmitter reessayer(@PathVariable long id) {
         Session session = active(id);
-        var client = anthropic.client();
         List<Ligne> historique = historique(id);
         if (historique.isEmpty() || !historique.getLast().role().equals("user")) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Rien à réessayer : la dernière réponse est complète.");
         }
         reserver(id);
         try {
-            return repondre(client, session);
+            return repondre(session);
         } catch (RuntimeException e) {
             repondent.remove(id);
             throw e;
         }
     }
 
-    private SseEmitter repondre(AnthropicClient client, Session session) {
+    private SseEmitter repondre(Session session) {
         long id = session.id();
         SseEmitter emitter = new SseEmitter(0L);
         Deltas deltas = t -> emitter.send(SseEmitter.event().name("delta").data(Map.of("texte", t)));
         Thread.ofVirtual().start(() -> {
             boolean pendantLeTour = true;
             try {
-                Message message = tourComplet(client, session, deltas, () -> {}).getLast();
-                var premier = Record.appel(message);
-                List<String> erreurs = premier.map(a -> Record.erreurs(Record.input(a))).orElse(List.of());
-                if (premier.isEmpty() && message.stopReason().filter(StopReason.END_TURN::equals).isPresent()) {
-                    // Une relance (D-18), masquée dans le fil.
-                    enregistrer(id, "user", MessageParam.ofUser(Record.RELANCE), false);
-                    message = tourComplet(client, session, deltas, () -> {}).getLast();
-                } else if (!erreurs.isEmpty()) {
-                    // record non conforme (schéma non strict) : une relance masquée, avec le tool_result attendu.
-                    log.info("record non conforme dans la Session {} : {}", id, erreurs);
-                    enregistrer(id, "user", messageUtilisateur(id, Record.relanceInvalide(erreurs)), false);
-                    Message corrige = tourComplet(client, session, deltas, () -> {}).getLast();
-                    if (Record.appel(corrige).isPresent()) {
-                        message = corrige;
-                    }
-                }
+                JsonNode record = tour(session, deltas).structuredOutput();
                 pendantLeTour = false;
-                var appel = Record.appel(message);
-                if (appel.isPresent()) {
-                    map.appliquer(session.projetId(), Record.input(appel.get()));
-                    String prototype = Record.input(appel.get()).path("prototype_html").asText("").strip();
+                if (record != null) {
+                    map.appliquer(session.projetId(), record);
+                    String prototype = record.path("prototype_html").asText("").strip();
                     if (!prototype.isEmpty()) {
                         jdbc.sql("INSERT INTO artefact (session_id, type, contenu) VALUES (?, 'prototype_html', ?)").params(id, prototype).update();
                     }
-                    emitter.send(SseEmitter.event().name("record").data(JSON.convertValue(Record.input(appel.get()), Map.class)));
-                } else if (message.stopReason().filter(StopReason.REFUSAL::equals).isPresent()) {
-                    emitter.send(SseEmitter.event().name("erreur").data(Map.of("message", "Claude a refusé de répondre à ce message.")));
+                    emitter.send(SseEmitter.event().name("record").data(JSON.convertValue(record, Map.class)));
                 } else {
                     emitter.send(SseEmitter.event().name("avertissement").data(Map.of("message",
                             "Réponse non structurée : le panneau Décisions et Questions n'est pas mis à jour.")));
@@ -436,126 +383,86 @@ class SessionController {
         }
     }
 
-    /** Erreurs non récupérables en clair (D-30) ; 408/409/429/5xx et réseau passent d'abord par les 2 retries du SDK. */
+    /** Erreurs en clair (D-30), d'après le message du CLI Claude Code. */
     static String messageErreur(Exception e) {
-        if (e instanceof UnauthorizedException) {
-            return "Clé Anthropic invalide : vérifier productdesigner.anthropic.api-key dans ~/.productdesigner/application.yml.";
+        String m = String.valueOf(e.getMessage());
+        if (e instanceof ClaudeCodeTimeoutException) {
+            return "Claude Code n'a pas répondu à temps : réessayer (ou augmenter spring.ai.claude-code.timeout). " + m;
         }
-        if (e instanceof NotFoundException n && String.valueOf(n.getMessage()).contains("does not exist")) {
-            return "Modèle indisponible pour ce compte ou cette région : régler productdesigner.anthropic.model"
-                    + " (sur Bedrock, vérifier l'accès au modèle dans la console). " + n.getMessage();
+        if (e instanceof ClaudeCodeException && e.getCause() instanceof IOException c && String.valueOf(c.getMessage()).contains("Cannot run program")) {
+            return "CLI Claude Code introuvable : l'installer (npm install -g @anthropic-ai/claude-code) ou régler spring.ai.claude-code.executable.";
         }
-        if (e instanceof PermissionDeniedException) {
-            return "Accès refusé : sur Bedrock, vérifier l'accès au modèle dans la console et la permission"
-                    + " bedrock-mantle:CreateInference. " + e.getMessage();
+        String bas = m.toLowerCase();
+        if (bas.contains("not logged in") || bas.contains("invalid api key") || bas.contains("authentication")
+                || bas.contains("oauth") || bas.contains("401")) {
+            return "Claude Code n'est pas authentifié : saisir un token (claude setup-token) dans l'en-tête de l'application. " + m;
         }
-        for (Throwable c = e; c != null; c = c.getCause()) {
-            if (c instanceof java.net.UnknownHostException && String.valueOf(c.getMessage()).startsWith("bedrock-mantle.")) {
-                return "Endpoint Bedrock introuvable (" + c.getMessage() + ") : cette région n'a pas Claude in Amazon Bedrock ;"
-                        + " régler productdesigner.bedrock.region sur une région qui l'a (ex. eu-west-1, eu-central-1, us-east-1).";
-            }
+        if (bas.contains("prompt is too long") || bas.contains("too long")) {
+            return "Requête trop longue pour le contexte du modèle : continue dans une nouvelle Session.";
         }
-        if (e instanceof SdkClientException) {
-            return "Identifiants AWS indisponibles ou expirés (relancer aws sso login ?) : " + e.getMessage();
-        }
-        if (e instanceof BadRequestException b) {
-            return b.getMessage().contains("too long")
-                    ? "Requête trop longue pour le contexte du modèle : continue dans une nouvelle Session."
-                    : "Requête refusée par l'API Anthropic : " + b.getMessage();
-        }
-        return "Réponse interrompue : " + e.getMessage();
+        return "Réponse interrompue : " + m;
     }
 
     /**
-     * Un tour complet : relance chaque pause_turn avec l'historique tel quel (blocs encrypted_content compris),
-     * {@value #PAUSES_MAX} fois au plus. Renvoie les messages du tour, le dernier portant la fin réelle.
+     * Un appel streamé : relaie les deltas de texte, persiste le message assistant complet (texte, puis record en bloc
+     * tool_use). Coupé en route, le texte reçu est persisté `incomplet` (affiché, exclu de l'historique), puis l'erreur remonte.
      */
-    private List<Message> tourComplet(AnthropicClient client, Session session, Deltas deltas, Runnable apresPause) throws IOException {
-        List<Message> messages = new ArrayList<>(List.of(tour(client, session, deltas)));
-        while (messages.getLast().stopReason().filter(StopReason.PAUSE_TURN::equals).isPresent()) {
-            if (messages.size() > PAUSES_MAX) {
-                throw new IllegalStateException("trop de pauses serveur");
-            }
-            apresPause.run();
-            messages.add(tour(client, session, deltas));
-        }
-        return messages;
-    }
-
-    /**
-     * Un appel streamé : relaie les deltas de texte, persiste le message assistant complet.
-     * Coupé en route, le texte reçu est persisté `incomplet` (affiché, exclu de l'historique), puis l'erreur remonte.
-     */
-    private Message tour(AnthropicClient client, Session session, Deltas deltas) throws IOException {
-        MessageAccumulator accumulator = MessageAccumulator.create();
+    private ClaudeCodeResult tour(Session session, Deltas deltas) {
         StringBuilder recu = new StringBuilder();
-        Message message;
-        try (StreamResponse<RawMessageStreamEvent> stream = client.messages().createStreaming(params(session))) {
-            for (RawMessageStreamEvent event : (Iterable<RawMessageStreamEvent>) stream.stream()::iterator) {
-                accumulator.accumulate(event);
-                var delta = event.contentBlockDelta().flatMap(d -> d.delta().text());
-                if (delta.isPresent()) {
-                    recu.append(delta.get().text());
-                    deltas.texte(delta.get().text());
+        ClaudeCodeResult resultat;
+        try {
+            resultat = claude.appeler(systeme(session), prompt(session.id()), Record.SCHEMA, session.methode().equals("research"), t -> {
+                recu.append(t);
+                try {
+                    deltas.texte(t);
+                } catch (IOException e) {
+                    throw new UncheckedIOException(e);
                 }
-            }
-            message = accumulator.message();
-        } catch (RuntimeException | IOException e) {
+            });
+        } catch (RuntimeException e) {
             if (!recu.isEmpty()) {
-                long partiel = enregistrer(session.id(), "assistant", MessageParam.ofAssistant(recu.toString()), true);
+                long partiel = enregistrer(session.id(), Map.of("role", "assistant", "content", recu.toString()), true);
                 jdbc.sql("UPDATE message SET incomplet = 1 WHERE id = ?").param(partiel).update();
             }
             throw e;
         }
-        long messageId = enregistrer(session.id(), "assistant", message.toParam(), true);
-        var usage = message.usage();
+        List<Map<String, Object>> blocs = new ArrayList<>();
+        if (!resultat.text().isBlank()) {
+            blocs.add(Map.of("type", "text", "text", resultat.text()));
+        }
+        if (resultat.structuredOutput() != null) {
+            blocs.add(Map.of("type", "tool_use", "id", Record.NOM, "name", Record.NOM, "input", resultat.structuredOutput()));
+        }
+        long messageId = enregistrer(session.id(), Map.of("role", "assistant", "content", blocs), true);
+        Claude.Usage usage = Claude.usage(resultat);
         jdbc.sql("UPDATE message SET modele = ?, input_tokens = ?, output_tokens = ?, cache_read_tokens = ?,"
                         + " cache_write_tokens = ? WHERE id = ?")
-                .params(anthropic.model(), usage.inputTokens(), usage.outputTokens(),
-                        usage.cacheReadInputTokens().orElse(0L), usage.cacheCreationInputTokens().orElse(0L), messageId)
+                .params(usage.modele(), usage.input(), usage.output(), usage.cacheRead(), usage.cacheWrite(), messageId)
                 .update();
-        return message;
+        return resultat;
     }
 
-    /** Message utilisateur ; si le tour précédent a appelé record, il commence par le tool_result attendu par l'API. */
-    private MessageParam messageUtilisateur(long sessionId, String texte) {
-        List<Ligne> lignes = historique(sessionId);
-        List<ContentBlockParam> blocs = new ArrayList<>();
-        if (!lignes.isEmpty() && lignes.getLast().role().equals("assistant")) {
-            for (JsonNode bloc : contenu(lignes.getLast().contenu())) {
-                if ("tool_use".equals(bloc.path("type").asText()) && Record.NOM.equals(bloc.path("name").asText())) {
-                    blocs.add(ContentBlockParam.ofToolResult(ToolResultBlockParam.builder()
-                            .toolUseId(bloc.path("id").asText()).content("Enregistré.").build()));
-                }
-            }
-        }
-        blocs.add(ContentBlockParam.ofText(TextBlockParam.builder().text(texte).build()));
-        return MessageParam.ofUserOfContentBlockParams(blocs);
+    private static Map<String, Object> utilisateur(String texte) {
+        return Map.of("role", "user", "content", texte);
     }
 
-    private MessageCreateParams params(Session session) {
-        Map<String, String> projet = projet(session.projetId());
+    private String systeme(Session session) {
         Methodes.Methode methode = methodes.get(session.methode());
-        var cache = CacheControlEphemeral.builder().build();
-        MessageCreateParams.Builder builder = MessageCreateParams.builder()
-                .model(anthropic.model())
-                .maxTokens(64000L)
-                .outputConfig(OutputConfig.builder().effort(OutputConfig.Effort.MEDIUM).build())
-                .systemOfTextBlockParams(List.of(
-                        TextBlockParam.builder().text(methode.prompt() + Record.consigne(methode.outputs())).cacheControl(cache).build(),
-                        TextBlockParam.builder().text(contexte(session, projet)).build()))
-                // Cache automatique : le préfixe d'historique est réutilisé d'un tour à l'autre.
-                .addTool(Record.TOOL)
-                .cacheControl(cache);
-        if (session.methode().equals("research") && anthropic.rechercheWeb()) {
-            builder.addTool(WebSearchTool20260209.builder().maxUses(RECHERCHES_MAX).build())
-                    .outputConfig(OutputConfig.builder().effort(OutputConfig.Effort.HIGH).build());
+        return methode.prompt() + Record.consigne(methode.outputs()) + "\n\n" + contexte(session, projet(session.projetId()));
+    }
+
+    /** Historique rejoué en texte à chaque appel (le CLI est sans état), record compris : la base reste la source de vérité. */
+    private String prompt(long sessionId) {
+        StringBuilder sb = new StringBuilder("Conversation jusqu'ici. Réponds au dernier message de l'utilisateur.\n");
+        for (Ligne l : historique(sessionId)) {
+            sb.append("\n<").append(l.role()).append(">\n").append(texte(l.contenu()));
+            JsonNode record = record(l.contenu());
+            if (record != null) {
+                sb.append("\n<record>").append(record).append("</record>");
+            }
+            sb.append("\n</").append(l.role()).append(">\n");
         }
-        List<MessageParam> historique = new ArrayList<>();
-        for (Ligne l : historique(session.id())) {
-            historique.add(lire(l.contenu()));
-        }
-        return builder.messages(historique).build();
+        return sb.toString();
     }
 
     /** Contexte stable de la Session : Projet, Destination, et la Question à résoudre s'il y en a une. */
@@ -565,10 +472,6 @@ class SessionController {
                 .query(String.class).single();
         if (!destination.isBlank()) {
             sb.append("\n\nDestination de la Map : ").append(destination);
-        }
-        if (!anthropic.rechercheWeb()) {
-            sb.append("\n\nAucune recherche web n'est disponible dans cette installation : ne crée pas de Question de type"
-                    + " research ; formule les faits à vérifier comme des Questions grilling ou tache.");
         }
         if (session.continuedFrom() != null) {
             sb.append("\n\nCette Session prend la suite d'une Session précédente arrivée en limite de contexte ; "
@@ -625,18 +528,10 @@ class SessionController {
         return lignes(sessionId).stream().filter(l -> !l.incomplet()).toList();
     }
 
-    private long enregistrer(long sessionId, String role, MessageParam param, boolean visible) {
+    private long enregistrer(long sessionId, Map<String, Object> message, boolean visible) {
         try {
             return jdbc.sql("INSERT INTO message (session_id, role, contenu, visible) VALUES (?, ?, ?, ?) RETURNING id")
-                    .params(sessionId, role, JSON.writeValueAsString(param), visible).query(Long.class).single();
-        } catch (IOException e) {
-            throw new IllegalStateException(e);
-        }
-    }
-
-    private static MessageParam lire(String contenu) {
-        try {
-            return JSON.readValue(contenu, MessageParam.class);
+                    .params(sessionId, message.get("role"), JSON.writeValueAsString(message), visible).query(Long.class).single();
         } catch (IOException e) {
             throw new IllegalStateException(e);
         }
@@ -665,14 +560,19 @@ class SessionController {
         return sb.toString();
     }
 
-    /** Round porté par l'appel record du message, s'il contient au moins une question. */
-    static Object round(String json) {
+    /** Sortie record du message (bloc tool_use record), null s'il n'en a pas. */
+    static JsonNode record(String json) {
         for (JsonNode bloc : contenu(json)) {
             if ("tool_use".equals(bloc.path("type").asText()) && Record.NOM.equals(bloc.path("name").asText())) {
-                JsonNode round = bloc.path("input").path("round");
-                return round.path("questions").isEmpty() ? null : JSON.convertValue(round, Map.class);
+                return bloc.path("input");
             }
         }
         return null;
+    }
+
+    /** Round porté par le record du message, s'il contient au moins une question. */
+    static Object round(String json) {
+        JsonNode record = record(json);
+        return record == null || record.path("round").path("questions").isEmpty() ? null : JSON.convertValue(record.path("round"), Map.class);
     }
 }
