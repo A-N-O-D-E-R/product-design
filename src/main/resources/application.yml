@@ -1,11 +1,10 @@
 server:
-  # Mono-utilisateur sans authentification (D-3) : jamais exposé au réseau.
-  address: 127.0.0.1
+  # Loopback par défaut : le login mock (sans mot de passe) l'exige. Pour servir d'autres machines : HOST=0.0.0.0 avec OIDC.
+  address: ${HOST:127.0.0.1}
 
 spring:
-  web:
-    error:
-      include-message: always
+  # Erreurs en RFC 9457 (application/problem+json) : le message est dans `detail`.
+  mvc.problemdetails.enabled: true
   application:
     name: productdesigner
   config:
@@ -14,19 +13,52 @@ spring:
     virtual:
       enabled: true
   ai:
+    model:
+      # Fournisseur LLM : claude-code (CLI Claude Code), anthropic, openai (ou compatible : base-url), bedrock-converse, ollama.
+      chat: claude-code
+      # Seul le chat sert : aucun autre modèle n'est créé.
+      embedding: none
+      image: none
+      audio:
+        speech: none
+        transcription: none
+      moderation: none
+    anthropic:
+      chat:
+        options:
+          model: claude-opus-5-5
     # CLI Claude Code (spring-ai-claude-code-starter). Auth : token saisi dans l'interface, sinon `claude login` local.
     claude-code:
       executable: claude
       model: opus
       timeout: 30m
       max-turns: 40
-  datasource:
-    url: jdbc:sqlite:${productdesigner.data-dir:${user.home}/.productdesigner}/data.db?foreign_keys=on&busy_timeout=5000
-    hikari:
-      # ponytail: une seule connexion évite SQLITE_BUSY ; mono-utilisateur, suffisant.
-      maximum-pool-size: 1
+  # Postgres 17. Dev : compose.yaml, démarré par spring-boot-docker-compose avec mvn spring-boot:run, qui branche la datasource.
+  # Ailleurs : SPRING_DATASOURCE_URL, SPRING_DATASOURCE_USERNAME et SPRING_DATASOURCE_PASSWORD (SPRING_DOCKER_COMPOSE_ENABLED=false).
+  docker.compose.lifecycle-management: start-only
+
+# Contrat OpenAPI de l'API, derrière la connexion comme le reste de /api (le front en tire ses types : pnpm api:types).
+springdoc:
+  api-docs.path: /api/openapi.json
+  paths-to-match: /api/**
+
+# Sécurité (starter de la collection). Poste local : login mock (n'importe quel nom et mot de passe, loopback seulement).
+# Hébergé : PRODUCTDESIGNER_MOCK=false, PRODUCTDESIGNER_OIDC=true et le fournisseur sous
+# spring.security.oauth2.client.registration.oidc.* / provider.oidc.issuer-uri (voir README).
+anode:
+  security:
+    mock: ${PRODUCTDESIGNER_MOCK:true}
+    env-oidc: ${PRODUCTDESIGNER_OIDC:false}
+    # Le front statique et la page de login sont publics ; seul /api demande une connexion (config/Securite).
+    # Le login mock fait sa propre page : l'app n'a pas de /login.
 
 productdesigner:
+  # Qui peut entrer, séparés par des virgules : nom d'utilisateur, ou e-mail vérifié d'OIDC. Vide : tout compte connecté.
+  allowed-users: ${PRODUCTDESIGNER_ALLOWED_USERS:}
+  # Recherche web de la research sur tout fournisseur (outil client) : clé API Tavily. Sans clé, seule l'API Anthropic
+  # en a une (recherche serveur) ; ailleurs la research est refusée.
+  recherche:
+    tavily-api-key: ""
   # $ par million de tokens (prix API Anthropic). cache-write : écriture de cache 5 min (1,25 × input).
   tarifs:
     claude-opus-5-5: { input: 4.00, output: 20.00, cache-read: 0.20, cache-write: 5.00 }

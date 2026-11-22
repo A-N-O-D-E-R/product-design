@@ -1,29 +1,21 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { ConsommationLigne } from '@/components/ConsommationLigne'
 import { MapVue } from '@/components/MapVue'
 import { SpecSection } from '@/components/SpecSection'
 import { Button } from '@/components/ui/button'
-import { api, type Carte, type Projet, type Session } from '@/lib/api'
+import { useProjet } from '@/hooks/useProjet'
+import { sessions as api } from '@/api/sessions'
 
 export function ProjetPage({ id }: { id: number }) {
-  const [projet, setProjet] = useState<Projet>()
-  const [sessions, setSessions] = useState<Session[]>([])
-  const [carte, setCarte] = useState<Carte>()
-  const [erreur, setErreur] = useState<string>()
+  const { projet, sessions, carte, setCarte, erreur } = useProjet(id)
   const [erreurAction, setErreurAction] = useState<string>()
   const navigate = useNavigate()
-
-  useEffect(() => {
-    api<Projet>(`/api/projets/${id}`).then(setProjet, (e) => setErreur(e.message))
-    api<Session[]>(`/api/projets/${id}/sessions`).then(setSessions)
-    api<Carte>(`/api/projets/${id}/map`).then(setCarte)
-  }, [id])
 
   /** Ouvre une Question de la frontière dans une Session à la Méthode de son type (E-6). */
   async function ouvrir(questionId: number) {
     try {
-      const s = await api<Session>(`/api/projets/${id}/questions/${questionId}/sessions`, { method: 'POST' })
+      const s = await api.ouvrir(id, questionId)
       navigate({ to: '/sessions/$id', params: { id: String(s.id) } })
     } catch (e) {
       setErreurAction((e as Error).message)
@@ -41,7 +33,7 @@ export function ProjetPage({ id }: { id: number }) {
       <Link to="/" className="text-sm text-muted-foreground">← Projets</Link>
       <div>
         <h1 className="text-xl font-semibold">{projet.nom}</h1>
-        <ConsommationLigne url={`/api/projets/${id}/consommation`} />
+        <ConsommationLigne projetId={id} />
       </div>
       {projet.description && <p className="whitespace-pre-wrap text-muted-foreground">{projet.description}</p>}
       <section className="grid gap-2 rounded-lg border p-3">
@@ -55,7 +47,7 @@ export function ProjetPage({ id }: { id: number }) {
             <Button size="sm" onClick={() => ouvrir(q.id)}>Ouvrir</Button>
           </div>
         ))}
-        {erreurAction && <p role="alert" className="text-sm text-red-700">{erreurAction}</p>}
+        {erreurAction && <p role="alert" className="text-sm text-destructive">{erreurAction}</p>}
       </section>
       {carte && <MapVue projetId={id} carte={carte} onChange={setCarte} />}
       <SpecSection projetId={id} mapVide={mapVide} />

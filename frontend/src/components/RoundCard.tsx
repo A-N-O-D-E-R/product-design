@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Textarea } from '@/components/ui/textarea'
-import type { Round } from '@/lib/api'
+import type { Round } from '@/api/sessions'
 
 /** Carte d'un round (D-15) : reco acceptée par défaut, réponse libre prioritaire, envoi groupé `Q1: …`. */
 export function RoundCard({ round, actif, onEnvoyer }: { round: Round; actif: boolean; onEnvoyer: (texte: string) => void }) {
@@ -30,7 +30,7 @@ export function RoundCard({ round, actif, onEnvoyer }: { round: Round; actif: bo
             <b>{q.id}.</b> <b>{q.titre}</b>
           </p>
           <p className="whitespace-pre-wrap">{q.corps}</p>
-          {q.recommandation && <p className="rounded bg-amber-50 px-2 py-1 text-sm text-amber-950">Reco : {q.recommandation}</p>}
+          {q.recommandation && <p className="rounded bg-warning/15 px-2 py-1 text-sm text-foreground">Reco : {q.recommandation}</p>}
           {actif && (
             <>
               {q.recommandation && (

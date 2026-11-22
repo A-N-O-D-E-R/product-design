@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { api, type Carte, type QuestionMap } from '@/lib/api'
+import { map, type Carte, type Liste as NomListe, type QuestionMap } from '@/api/map'
 
 const STATUTS = { open: 'ouverte', claimed: 'en cours', resolved: 'résolue', hors_perimetre: 'hors périmètre' }
 const TYPES = ['grilling', 'research', 'prototype', 'tache'] as const
@@ -12,18 +12,23 @@ type Edition = { titre: string; corps: string; type: string; blockedBy: string }
 /** Map d'un Projet, éditable à la main (E-3, E-5). Chaque écriture renvoie la Carte à jour. */
 export function MapVue({ projetId, carte, onChange }: { projetId: number; carte: Carte; onChange: (c: Carte) => void }) {
   const [erreur, setErreur] = useState<string>()
-  const base = `/api/projets/${projetId}`
 
-  async function ecrire(path: string, method: string, body?: unknown) {
+  async function ecrire(requete: Promise<Carte>) {
     setErreur(undefined)
     try {
-      onChange(await api<Carte>(base + path, { method, body: body === undefined ? undefined : JSON.stringify(body) }))
+      onChange(await requete)
       return true
     } catch (e) {
       setErreur((e as Error).message)
       return false
     }
   }
+
+  const actions = (liste: NomListe) => ({
+    onAjouter: (texte: string) => ecrire(map.ajouterLigne(projetId, liste, texte)),
+    onModifier: (id: number, texte: string) => ecrire(map.modifierLigne(projetId, liste, id, texte)),
+    onSupprimer: (id: number) => ecrire(map.supprimerLigne(projetId, liste, id)),
+  })
 
   const question = (e: Edition) => ({
     titre: e.titre,
@@ -34,8 +39,8 @@ export function MapVue({ projetId, carte, onChange }: { projetId: number; carte:
 
   return (
     <div className="grid gap-4">
-      {erreur && <p role="alert" className="text-sm text-red-700">{erreur}</p>}
-      <EnTete carte={carte} onSave={(destination, notes) => ecrire('/map', 'PUT', { destination, notes })} />
+      {erreur && <p role="alert" className="text-sm text-destructive">{erreur}</p>}
+      <EnTete carte={carte} onSave={(destination, notes) => ecrire(map.modifierEnTete(projetId, destination, notes))} />
 
       <section className="grid gap-2">
         <h2 className="font-semibold">Questions</h2>
@@ -44,27 +49,23 @@ export function MapVue({ projetId, carte, onChange }: { projetId: number; carte:
           <QuestionLigne
             key={q.id}
             q={q}
-            onSave={(e) => ecrire(`/questions/${q.id}`, 'PUT', question(e))}
-            onHorsPerimetre={() => ecrire(`/questions/${q.id}/hors-perimetre`, 'POST')}
+            onSave={(e) => ecrire(map.modifierQuestion(projetId, q.id, question(e)))}
+            onHorsPerimetre={() => ecrire(map.horsPerimetre(projetId, q.id))}
           />
         ))}
-        <NouvelleQuestion onSave={(e) => ecrire('/questions', 'POST', question(e))} />
+        <NouvelleQuestion onSave={(e) => ecrire(map.creerQuestion(projetId, question(e)))} />
       </section>
 
       <Liste
         titre="Brouillard"
         lignes={carte.brouillard}
-        onAjouter={(texte) => ecrire('/brouillard', 'POST', { texte })}
-        onModifier={(id, texte) => ecrire(`/brouillard/${id}`, 'PUT', { texte })}
-        onSupprimer={(id) => ecrire(`/brouillard/${id}`, 'DELETE')}
-        onPromouvoir={(id) => ecrire(`/brouillard/${id}/promouvoir`, 'POST', { type: 'grilling' })}
+        {...actions('brouillard')}
+        onPromouvoir={(id) => ecrire(map.promouvoir(projetId, id))}
       />
       <Liste
         titre="Hors périmètre"
         lignes={carte.horsPerimetre}
-        onAjouter={(texte) => ecrire('/hors-perimetre', 'POST', { texte })}
-        onModifier={(id, texte) => ecrire(`/hors-perimetre/${id}`, 'PUT', { texte })}
-        onSupprimer={(id) => ecrire(`/hors-perimetre/${id}`, 'DELETE')}
+        {...actions('hors-perimetre')}
       />
     </div>
   )

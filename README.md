@@ -20,9 +20,10 @@ Application locale, mono-utilisateur, sans authentification. Vocabulaire du doma
 ## Prérequis
 
 - **Java 25** (ex. `sdk install java 25.0.2-oracle`) et Maven 3.9+.
-- Node n'est pas requis : le build Maven installe sa propre copie (v20.20) pour construire le front.
-- Le **CLI Claude Code** installé (`npm install -g @anthropic-ai/claude-code`, vérifier `claude --version`). L'app l'appelle via [spring-ai-claude-code-starter](https://github.com/A-N-O-D-E-R/spring-ai-claude-code-starter), à installer d'abord dans le dépôt Maven local : `mvn install` dans ce dépôt.
-- Un accès à Claude pour ce CLI : un token OAuth d'abonnement (`claude setup-token`) ou une clé API Console, saisi dans l'en-tête de l'app ; à défaut, la connexion locale (`claude login`).
+- **Docker** : Postgres 17 en développement (`compose.yaml`) et dans les tests (Testcontainers).
+- Node n'est pas requis : le build Maven installe sa propre copie (Node 22 et pnpm 10) pour construire le front.
+- Un fournisseur LLM (`spring.ai.model.chat`) : le **CLI Claude Code** (défaut, `claude-code`), API Anthropic, OpenAI ou compatible, Amazon Bedrock, ou Ollama en local.
+  - `claude-code` : le CLI installé (`npm install -g @anthropic-ai/claude-code`, vérifier `claude --version`), appelé via [spring-ai-claude-code-starter](https://github.com/A-N-O-D-E-R/spring-ai-claude-code-starter), à installer d'abord dans le dépôt Maven local (`mvn install` dans ce dépôt). Accès : un token OAuth d'abonnement (`claude setup-token`) ou une clé API Console, saisi dans l'app (écrit dans `~/.productdesigner/claude-token`) ; à défaut, la connexion locale (`claude login`). Voir [ADR 0009](docs/adr/0009-claude-code-cli.md).
 - Pour l'export, un site Atlassian Cloud, un email et un [token API](https://id.atlassian.com/manage-profile/security/api-tokens) (non scopé). La même config sert à Jira et à Confluence.
 
 ## Configuration
@@ -30,64 +31,139 @@ Application locale, mono-utilisateur, sans authentification. Vocabulaire du doma
 Les secrets vivent hors du dépôt, dans `~/.productdesigner/application.yml` (importé au démarrage) :
 
 ```yaml
-productdesigner:
-  jira:
-    site: https://<site>.atlassian.net
-    email: moi@exemple.fr
-    token: <token API Atlassian>
+spring:
+  ai:
+    model:
+      chat: anthropic   # défaut : claude-code (aucune clé ici, le token se saisit dans l'app)
+    anthropic:
+      api-key: sk-ant-...
+      # chat.options.model: claude-opus-5-5   # défaut
 ```
 
-### Jira et Confluence
+### Research avec ai-scientist
 
-Même compte Atlassian pour les deux. Le token API conseillé est **scopé** (« Create API token with scopes ») ; il passe par la passerelle `api.atlassian.com`, qui demande le `cloudId` du site (`https://<site>.atlassian.net/_edge/tenant_info`) :
+Pour une Question **technique ou de machine learning**, la research peut confier une étude à [ai-scientist](https://github.com/A-N-O-D-E-R/ai-scientist)
+en plus de la recherche web : un second outil, `ai_scientist`, proposé au modèle à côté de `web_search`. Il crée un job d'ideation
+(`POST /v1/ideations`), l'attend (`GET /v1/jobs/{id}`) et rend des idées de recherche avec hypothèse, travaux connexes (recherche
+bibliographique Semantic Scholar) et risques. Le résultat complet devient un **Artefact** de la Session (affiché comme un rapport),
+en plus du rapport final. Lent (minutes) et payant : une étude par recherche, coût plafonné.
 
 ```yaml
 productdesigner:
-  jira:
-    site: https://<site>.atlassian.net
-    email: moi@exemple.fr
-    token: <token API scopé>
-    cloud-id: <cloudId>          # absent : token sans scope, appels directs au site
+  ai-scientist:
+    url: https://ai-scientist.exemple.org
+    api-key: ais_...             # une clé d'API d'ai-scientist (Réglages > clés d'API)
+    # budget-usd: 2   max-generations: 3   timeout: 20m   poll-interval: 10s
 ```
+Sans `url` et `api-key`, l'outil n'est pas proposé. Un échec, une pause ou un délai revient au modèle en résultat d'outil : la research continue
+sans lui. Le contrat est l'OpenAPI d'ai-scientist : `src/test/resources/contracts/ai-scientist-openapi.json` (copie de son instantané,
+à resynchroniser) valide la requête envoyée et les champs lus (`AiScientistTest`). Pas encore : les *experiment runs*.
 
-Scopes minimaux :
+### Base de données
 
-| Produit | Scopes |
+Postgres 17, schéma géré par Flyway (`V1` à `V20`), accès par `JdbcClient`.
+
+- **Développement** : `mvn spring-boot:run` démarre le Postgres de `compose.yaml` (spring-boot-docker-compose) et en branche la
+  datasource ; les données restent dans le volume Docker entre deux lancements.
+- **Ailleurs** : `SPRING_DATASOURCE_URL` (`jdbc:postgresql://hôte:5432/productdesigner`), `SPRING_DATASOURCE_USERNAME`,
+  `SPRING_DATASOURCE_PASSWORD`, et `SPRING_DOCKER_COMPOSE_ENABLED=false`.
+- **Tests** : Testcontainers, une base neuve par classe de test.
+
+> Les données d'une ancienne installation SQLite (`~/.productdesigner/data.db`) ne sont pas migrées : les migrations Flyway ont été
+> réécrites pour Postgres (mêmes versions, dates en `timestamptz`, drapeaux en `boolean`). Une installation existante repart d'une base vide.
+
+### Sécurité
+
+Starter de sécurité de la collection (`anode.security.*`). Seul `/api/**` demande une connexion : le front statique et la page
+de login sont publics, l'API répond `401` en `application/problem+json` (RFC 9457) sans connexion, et les écritures demandent le
+jeton CSRF (cookie `XSRF-TOKEN` renvoyé en `X-XSRF-TOKEN`, ce que fait le front).
+
+| Usage | Configuration |
 |---|---|
-| Jira | `read:jira-work`, `write:jira-work` |
-| Confluence | `read:space:confluence`, `read:page:confluence`, `write:page:confluence` |
+| **Poste local** (défaut) | login *mock* : n'importe quel nom et mot de passe. `anode.security.mock: true` ; le serveur doit écouter en loopback (`server.address` = 127.0.0.1) et `Host` doit être local (DNS rebinding) : sinon le démarrage échoue |
+| **Hébergé** | `PRODUCTDESIGNER_MOCK=false`, `PRODUCTDESIGNER_OIDC=true`, `HOST=0.0.0.0`, et le fournisseur : `spring.security.oauth2.client.registration.oidc.{client-id,client-secret,scope}` + `provider.oidc.issuer-uri` (plusieurs fournisseurs : une `registration` chacun) |
+| Qui entre | `productdesigner.allowed-users` (nom, ou e-mail vérifié d'OIDC, séparés par des virgules). Vide : tout compte connecté. Avec OIDC seulement : le login mock donne à tous la même identité |
 
-Un token expire au bout d'un an au plus ; l'app affiche alors « Token Jira expiré ou invalide ».
+> L'application n'a **pas de données par utilisateur** : tout compte autorisé voit tous les Projets. Hébergée avec un
+> fournisseur public (GitHub, Google), renseigner `allowed-users`.
 
-### Claude Code
+**Clés d'API** pour les autres applications (idea-generator → `POST /api/projets/import`) : sans session ni CSRF, en
+`Authorization: Bearer pd_...`.
 
-Le token Claude se saisit dans l'interface (« Saisir un token » dans l'en-tête), pas dans ce fichier : il est écrit dans `~/.productdesigner/claude-token` (lecture seule pour le propriétaire), jamais renvoyé au navigateur, et passé à chaque processus du CLI (`CLAUDE_CODE_OAUTH_TOKEN`, ou `ANTHROPIC_API_KEY` pour une clé `sk-ant-api…`). API équivalente : `PUT /api/config/token` avec `{"token":"…"}`, `GET` pour l'état, `DELETE` pour le retirer.
+```sh
+# connecté dans le navigateur : créer une clé (affichée une seule fois)
+curl -X POST $BASE/api/cles-api -H 'Content-Type: application/json' -d '{"nom":"idea-generator","jours":90}'
+curl -X POST $BASE/api/projets/import -H "Authorization: Bearer pd_..." -H 'Content-Type: application/json' --data @idea.json
+```
+10 clés actives au plus, 1 à 365 jours, seul le SHA-256 est stocké, `DELETE /api/cles-api/{id}` révoque. Une clé ne gère pas les
+clés (session de navigateur seulement).
 
-Chaque appel est un `claude -p` sans état (l'historique est rejoué depuis la base), isolé de la config de la machine : aucun réglage utilisateur ni plugin, aucun serveur MCP, aucun outil, sauf `WebSearch` pour les Sessions *research*. Il tourne dans `~/.productdesigner/claude-workspace`. Réglages (`spring.ai.claude-code.*`) : `model` (défaut `opus`), `timeout` (`30m`), `max-turns` (`40`), `executable` (`claude`).
+### Jira et Confluence
 
-Limites : pas de prompt caching piloté par l'app (le CLI gère le sien), et le remplissage de contexte affiché cumule les tours internes du CLI (recherches web comprises).
+Clients fournis par les starters `spring-boot-starter-jira` et `spring-boot-starter-confluence` de
+[springboot-starter-collection](https://github.com/A-N-O-D-E-R/springboot-starter-collection) (`anode.jira.*` et
+`anode.confluence.*`, même compte Atlassian pour les deux). Le token API conseillé est **scopé** (« Create API token with
+scopes ») ; il passe par la passerelle `api.atlassian.com`, qui demande le `cloudId` du site
+(`https://<site>.atlassian.net/_edge/tenant_info`) :
 
-Sans token saisi, l'app utilise la connexion locale du CLI et affiche un bandeau ; sans config Jira, l'export l'indique. Autres réglages (valeurs par défaut dans [`src/main/resources/application.yml`](src/main/resources/application.yml), surchargeables au même endroit) :
+```yaml
+anode:
+  jira: &atlassian
+    base-url: https://<site>.atlassian.net
+    email: moi@exemple.fr
+    api-token: <token API scopé>
+    cloud-id: <cloudId>          # absent : token sans scope, appels directs au site
+  confluence: *atlassian
+```
+Reprises : les starters réessaient les 429 (en attendant `Retry-After`) pour toute requête, et les 502/503/504 pour les seules
+requêtes idempotentes (une création dont le résultat est inconnu n'est jamais rejouée à l'aveugle : l'export la retrouve
+par recherche). Réglage : `anode.jira.retry.max-retries` (3), `.delay` (1 s), `.max-delay` (10 s), idem pour `confluence`.
+
+**Vers digital-factory** : les Stories exportées portent l'étiquette `factory` (`productdesigner.jira.label-factory`, vide : aucune ; une
+Story déjà exportée la reçoit au ré-export sans perdre ses autres étiquettes). Leur description reprend le texte et les critères du
+Ticket, puis les **exigences couvertes avec leur texte et leurs Décisions sources** (`E-3 … [D-2, D-5]`, tel que la Spec les écrit) et
+une ligne `Source : productDesigner, Projet …, Spec v…` (avec l'idée d'origine si le Projet vient d'un import). Les liens « Blocks »
+entre Stories donnent l'ordre : la règle d'intake de digital-factory (`labels = factory AND status = "To Do"`) ne prend pas une Story
+tant qu'une bloquante n'est pas terminée.
+
+> Migration : `anode.atlassian.*` (atlassian-springboot-starter) est remplacé par `anode.jira.*` et `anode.confluence.*`.
 
 | Propriété | Défaut | Rôle |
 |---|---|---|
-| `productdesigner.data-dir` | `~/.productdesigner` | Dossier de la base `data.db` |
+| `spring.datasource.url` / `.username` / `.password` | Postgres du `compose.yaml` en dev | Base Postgres 17 (voir [Base de données](#base-de-données)) |
 | `productdesigner.tarifs.<modèle>` | Opus 5.5, Sonnet 5.5 | $ par million de tokens, pour le coût estimé |
 | `productdesigner.contexte.fenetre` / `.seuil` | `1000000` / `0.8` | Bandeau « Continuer dans une nouvelle Session » |
-| `productdesigner.jira.backoff-ms` | `2000` | Base du backoff sur un 429 Jira |
+| `productdesigner.allowed-users` | vide | Qui peut entrer (voir Sécurité) |
+| `productdesigner.jira.label-factory` | `factory` | Étiquette des Stories exportées, prise par l'intake de digital-factory |
+| `productdesigner.recherche.tavily-api-key` | vide | Recherche web client de la research, tout fournisseur |
+| `productdesigner.ai-scientist.url` / `.api-key` | vide | Outil `ai_scientist` de la research (voir ci-dessus) |
+
+## Docker
+
+```sh
+docker compose -f deploy/compose.yaml up -d --build      # app + Postgres, login mock, http://127.0.0.1:8080
+```
+`deploy/compose.yaml` publie le port sur `127.0.0.1` seul : le login mock n'a pas de mot de passe (`productdesigner.mock-publie-en-local`,
+sans quoi le démarrage refuse d'écouter sur `0.0.0.0` avec le login mock). Hébergé : OIDC (voir [Sécurité](#sécurité)). L'image est
+construite par le CI (`ghcr.io/a-n-o-d-e-r/productdesigner`).
+
+## Contrat de l'API
+
+`/api/openapi.json` (OpenAPI 3.1, derrière la connexion). `OpenApiTest` le compare à `src/test/resources/openapi.json` : un
+changement d'API fait échouer le test ; relire le diff puis régénérer avec `UPDATE_OPENAPI=1 mvn test -Dtest=OpenApiTest`.
 
 ## Lancer
 
 ```sh
 JAVA_HOME=~/.sdkman/candidates/java/25.0.2-oracle mvn package
-java -jar target/productdesigner-0.1.0-SNAPSHOT.jar
+java -jar target/productdesigner-0.3.0.jar   # avec SPRING_DATASOURCE_URL/USERNAME/PASSWORD et SPRING_DOCKER_COMPOSE_ENABLED=false
 ```
 
-Puis http://localhost:8080. Le jar contient le front ; la base et ses migrations sont créées au premier lancement.
+Puis http://localhost:8080. Le jar contient le front ; les migrations Flyway s'appliquent au premier lancement sur la base Postgres indiquée.
 
-**Développement** : `mvn spring-boot:run` pour le backend (port 8080) et `npm run dev` dans `frontend/` (le serveur Vite relaie `/api`).
+**Développement** : `mvn spring-boot:run` pour le backend (port 8080) et `pnpm dev` dans `frontend/` (le serveur Vite relaie `/api`). Dans `frontend/` : `pnpm lint`, `pnpm test` (vitest), `pnpm build`. Après tout changement de contrat REST : `UPDATE_OPENAPI=1 mvn test -Dtest=OpenApiTest` puis `pnpm api:types` (régénère `src/api/schema.d.ts`) ; un test échoue si les deux divergent.
 
-**Tests** : `mvn test` (ajouter `-Dskip.npm -Dskip.installnodenpm` pour ne pas rebuilder le front). Ils remplacent le CLI `claude` par un script qui rejoue des sorties stream-json, et Jira par un faux serveur : aucun appel réseau.
+**Tests** : `mvn test` (ajouter `-Dskip.pnpm -Dskip.installnodepnpm` pour ne pas rebuilder le front). Ils tournent contre de faux serveurs (Anthropic, OpenAI, Tavily, Jira, Confluence), sans appel réseau, et contre un vrai Postgres (Testcontainers, Docker requis).
 
 ## Architecture
 
@@ -98,23 +174,28 @@ navigateur (React, TanStack Router, shadcn)
 Spring Boot 4.1, un seul jar, virtual threads
    ├─ methodes/*.md        prompts des Méthodes (frontmatter : champs de record utilisés)
    ├─ prompts/*.md         prompts de la Spec et de la Roadmap
-   ├─ Claude Code CLI      via spring-ai-claude-code-starter : claude -p en stream-json,
-   │                       record en --json-schema, WebSearch pour la research
-   ├─ AtlassianClient      Jira v3 (Basic, bulk, ADF, Retry-After) et Confluence v2 (pages en ADF, versions)
-   └─ JdbcClient + Flyway ─▶ SQLite (une connexion)
+   ├─ Llm                  streaming, tool `record`, sortie structurée ; CLI Claude Code (ClaudeCode), ou Spring AI :
+   │                       Anthropic, OpenAI, Bedrock, Ollama
+   │                       (effort, prompt caching et recherche serveur sur Anthropic)
+   ├─ Recherche            outil web_search exécuté par l'app (Tavily), tout fournisseur
+   ├─ JiraService          export Roadmap vers Jira v3 (bulk, ADF), via spring-boot-starter-jira
+   ├─ ConfluenceService    publication de la Spec dans Confluence v2 (pages en ADF, versions)
+   ├─ Atlassian            config absente et messages dédiés pour 401 et 429 persistant (les reprises sont dans les starters)
+   ├─ controller ─▶ service ─▶ repository   (une zone = un trio ; seuls les repositories écrivent du SQL)
+   └─ JdbcClient + Flyway ─▶ Postgres 17
 ```
 
-- **`record`** : une sortie structurée (`--json-schema`), au schéma commun à toutes les Méthodes, porte les sorties d'un tour (round, Décisions proposées, Questions, modifications de Map, prototype). Seules les Décisions demandent une confirmation.
-- Les messages sont stockés en blocs (texte, puis `record` en bloc `tool_use`) et rejoués en texte à chaque appel, `record` compris.
+- **`record`** : un seul tool, au schéma strict commun à toutes les Méthodes, porte les sorties structurées d'un tour (round, Décisions proposées, Questions, modifications de Map, prototype). Seules les Décisions demandent une confirmation.
+- Les messages sont stockés dans un format neutre (blocs `text`, `tool_use`, `tool_result`) et convertis en messages Spring AI à chaque tour (`Conversation`). Les blocs propres à un fournisseur (thinking, résultats de recherche serveur chiffrés) ne sont pas rejoués.
 - Le contenu HTML d'un prototype est non fiable : iframe `sandbox="allow-scripts"` sans `allow-same-origin`, CSP sans réseau, et refus serveur des requêtes `Origin: null`.
 
 ## Organisation du dépôt
 
 | Chemin | Contenu |
 |---|---|
-| `src/main/java/productdesigner/` | Backend : un contrôleur par zone (Projet, Session, Map, Décision, Spec, Roadmap, Jira, Confluence) |
-| `src/main/resources/db/migration/` | Schéma SQLite (Flyway) |
-| `frontend/src/` | Pages et composants du front |
+| `src/main/java/com/anode/product/designer/` | Backend en 3 couches : `controller` (HTTP et SSE seulement), `service` (règles métier, LLM, Jira, Confluence, transactions), `repository` (tout le SQL, via `JdbcClient`). Une zone = un contrôleur, un service, un repository (Projet, Session, Map, Décision, Spec, Roadmap, Consommation) |
+| `src/main/resources/db/migration/` | Schéma Postgres (Flyway, V1 à V20) |
+| `frontend/src/` | Front en 3 couches comme le backend : `api/` (un module par zone : types + appels REST/SSE, via `client.ts`), `hooks/` (état et actions : `useSession`, `useProjet`, `useDecisions`), `pages/` et `components/` (affichage seulement) |
 | `.scratch/productdesigner-mvp/` | Map de conception, Questions résolues, Spec du MVP, prototype de l'écran de Session |
 | `.scratch/productdesigner-build/` | Roadmap et Tickets d'implémentation, avec notes de réalisation |
 | `docs/adr/` | Décisions d'architecture prises après la Spec du MVP |
@@ -122,11 +203,9 @@ Spring Boot 4.1, un seul jar, virtual threads
 
 ## État de validation
 
-MVP terminé : 22 Tickets de la Roadmap, plus les suites de revue et du test réel. Tests automatisés sans appel réseau (faux CLI Claude Code, faux Jira et Confluence).
+MVP terminé : 22 Tickets de la Roadmap, plus les suites de revue et du test réel. Tests automatisés sans appel réseau (faux serveurs Anthropic, OpenAI, Tavily, Jira et Confluence).
 
-Depuis le 2026-11-22, Claude passe par le CLI Claude Code ([ADR 0004](docs/adr/0004-claude-code-cli.md)) ; Amazon Bedrock est retiré. Les parcours ci-dessous restent à revérifier en réel par ce chemin.
-
-Vérifié en réel le 2026-11-03, alors sur Bedrock (détail : [`.scratch/productdesigner-build/issues/24-test-reel.md`](.scratch/productdesigner-build/issues/24-test-reel.md)) :
+Vérifié en réel le 2026-11-03 (détail : [`.scratch/productdesigner-build/issues/24-test-reel.md`](.scratch/productdesigner-build/issues/24-test-reel.md)) :
 
 | Parcours | Réel | Avec |
 |---|---|---|
@@ -134,11 +213,39 @@ Vérifié en réel le 2026-11-03, alors sur Bedrock (détail : [`.scratch/produc
 | Spec (2 versions) et Roadmap | oui | Amazon Bedrock, Opus 5 |
 | Export et ré-export Jira | oui | Jira Cloud, token scopé |
 | Publication Confluence (2 versions) | oui | Confluence Cloud, token scopé |
-| Research (recherche web) | **non** | indisponible sur Bedrock ; désormais `WebSearch` du CLI |
+| Research (recherche web) | **non** | demande une clé API Anthropic (indisponible sur Bedrock) |
 | Prototype | non | testé contre un faux serveur ; isolation de l'iframe vérifiée dans Chromium |
+| API Anthropic directe | non | pas de clé disponible |
+
+Ce test réel date d'avant Spring AI (Bedrock via l'endpoint Mantle) : Bedrock Converse, OpenAI réel, Ollama et Tavily réel restent à vérifier ([ADR 0004](docs/adr/0004-fournisseur-llm-spring-ai.md)).
 
 Décisions prises après la Spec du MVP : [`docs/adr/`](docs/adr/).
 
 ## Licences
 
 Les fichiers de Méthode et le prompt de Roadmap sont adaptés de [mattpocock/skills](https://github.com/mattpocock/skills), sous licence MIT ; voir [`LICENSES/mattpocock-skills.txt`](LICENSES/mattpocock-skills.txt). Ce projet n'est ni affilié à son auteur ni approuvé par lui.
+
+## Importer une idée d'idea-generator
+
+`POST /api/projets/import` prend l'`idea.json` d'idea-generator (contrat `idea-brief.schema.json`, copie de
+`digital-factory/factory-contracts` : le garder synchronisé) et amorce un Projet et sa Map :
+
+| idea.json | productDesigner |
+|---|---|
+| `brief.name`, `brief.oneLiner` | nom et description du Projet |
+| `brief.problem` | Destination de la Map |
+| `brief.audience`, `mvp`, `stack`, `firstSteps` | notes de la Map |
+| `brief.openQuestions` | Questions (grilling, ouvertes) |
+| `brief.outOfScope` | Hors périmètre |
+| `brief.risks`, `research.riskFactors`, `research.hypotheses` | Brouillard |
+| `research` (ai-scientist) | artefact `research_md` d'une Session research close |
+| `lineage[].sourceUrl` (ou `?source=`) | `projet.source_idea_url`, provenance en JSON dans `projet.source_idea` |
+
+```sh
+curl -X POST 'http://localhost:8080/api/projets/import?source=https://ideas.example.org/boards/7/ideas/42' \
+  -H 'Content-Type: application/json' --data @idea.json
+curl -X POST http://localhost:8080/api/projets/import -F file=@idea.json      # ou en fichier
+```
+
+201 avec les compteurs ; 422 si l'idea.json ne respecte pas le schéma (les violations sont dans le message) ; 409 si
+la même source est déjà importée.

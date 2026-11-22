@@ -1,0 +1,2240 @@
+{
+  "openapi" : "3.1.0",
+  "info" : {
+    "title" : "productDesigner API",
+    "description" : "Projets, Map, Sessions, Spec, Roadmap, exports Jira et Confluence, import d'idées, clés d'API.",
+    "version" : "v1"
+  },
+  "servers" : [ {
+    "url" : "/"
+  } ],
+  "paths" : {
+    "/api/tickets/{id}" : {
+      "put" : {
+        "tags" : [ "roadmap-controller" ],
+        "operationId" : "modifierTicket",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/TicketEdite"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Roadmap"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete" : {
+        "tags" : [ "roadmap-controller" ],
+        "operationId" : "supprimerTicket",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Roadmap"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projets/{projetId}/{liste}/{id}" : {
+      "put" : {
+        "tags" : [ "map-controller" ],
+        "operationId" : "modifierLigne",
+        "parameters" : [ {
+          "name" : "projetId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }, {
+          "name" : "liste",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/Texte"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Carte"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete" : {
+        "tags" : [ "map-controller" ],
+        "operationId" : "supprimerLigne",
+        "parameters" : [ {
+          "name" : "projetId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }, {
+          "name" : "liste",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Carte"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projets/{projetId}/questions/{id}" : {
+      "put" : {
+        "tags" : [ "map-controller" ],
+        "operationId" : "modifierQuestion",
+        "parameters" : [ {
+          "name" : "projetId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }, {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/QuestionEditee"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Carte"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projets/{projetId}/map" : {
+      "get" : {
+        "tags" : [ "map-controller" ],
+        "operationId" : "carte",
+        "parameters" : [ {
+          "name" : "projetId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Carte"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put" : {
+        "tags" : [ "map-controller" ],
+        "operationId" : "modifierEnTete",
+        "parameters" : [ {
+          "name" : "projetId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/EnTete"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Carte"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jalons/{id}" : {
+      "put" : {
+        "tags" : [ "roadmap-controller" ],
+        "operationId" : "renommerJalon",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/Titre"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Roadmap"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/config/token" : {
+      "get" : {
+        "tags" : [ "claude-token" ],
+        "operationId" : "etat",
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Etat"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put" : {
+        "tags" : [ "claude-token" ],
+        "operationId" : "enregistrer",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/Saisie"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Etat"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete" : {
+        "tags" : [ "claude-token" ],
+        "operationId" : "effacer",
+        "responses" : {
+          "204" : {
+            "description" : "No Content"
+          }
+        }
+      }
+    },
+    "/api/specs/{specId}/roadmap" : {
+      "get" : {
+        "tags" : [ "roadmap-controller" ],
+        "operationId" : "roadmap",
+        "parameters" : [ {
+          "name" : "specId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Roadmap"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post" : {
+        "tags" : [ "roadmap-controller" ],
+        "operationId" : "generer",
+        "parameters" : [ {
+          "name" : "specId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/SseEmitter"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/specs/{specId}/export-jira" : {
+      "post" : {
+        "tags" : [ "jira-controller" ],
+        "operationId" : "exporter",
+        "parameters" : [ {
+          "name" : "specId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/Demande"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Resultat"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/specs/{specId}/export-confluence" : {
+      "post" : {
+        "tags" : [ "confluence-controller" ],
+        "operationId" : "publier",
+        "parameters" : [ {
+          "name" : "specId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/Demande"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Publication"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions/{sessionId}/decisions" : {
+      "get" : {
+        "tags" : [ "decision-controller" ],
+        "operationId" : "panneau",
+        "parameters" : [ {
+          "name" : "sessionId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Panneau"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post" : {
+        "tags" : [ "decision-controller" ],
+        "operationId" : "confirmer",
+        "parameters" : [ {
+          "name" : "sessionId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/Confirmation"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "description" : "Created",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Decision"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions/{id}/relancer" : {
+      "post" : {
+        "tags" : [ "session-controller" ],
+        "operationId" : "relancer",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Session"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions/{id}/reessayer" : {
+      "post" : {
+        "tags" : [ "session-controller" ],
+        "operationId" : "reessayer",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/SseEmitter"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions/{id}/messages" : {
+      "post" : {
+        "tags" : [ "session-controller" ],
+        "operationId" : "envoyer",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/NouveauMessage"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/SseEmitter"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions/{id}/continuer" : {
+      "post" : {
+        "tags" : [ "session-controller" ],
+        "operationId" : "continuer",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "201" : {
+            "description" : "Created",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Session"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions/{id}/clore" : {
+      "post" : {
+        "tags" : [ "session-controller" ],
+        "operationId" : "clore",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Session"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projets" : {
+      "get" : {
+        "tags" : [ "projet-controller" ],
+        "operationId" : "lister",
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/Projet"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post" : {
+        "tags" : [ "projet-controller" ],
+        "operationId" : "creer",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/NouveauProjet"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "description" : "Created",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Cree"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projets/{projetId}/{liste}" : {
+      "post" : {
+        "tags" : [ "map-controller" ],
+        "operationId" : "ajouterLigne",
+        "parameters" : [ {
+          "name" : "projetId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }, {
+          "name" : "liste",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/Texte"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "description" : "Created",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Carte"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projets/{projetId}/specs" : {
+      "get" : {
+        "tags" : [ "spec-controller" ],
+        "operationId" : "versions",
+        "parameters" : [ {
+          "name" : "projetId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/Version"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post" : {
+        "tags" : [ "spec-controller" ],
+        "operationId" : "generer_1",
+        "parameters" : [ {
+          "name" : "projetId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/SseEmitter"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projets/{projetId}/sessions" : {
+      "get" : {
+        "tags" : [ "session-controller" ],
+        "operationId" : "lister_1",
+        "parameters" : [ {
+          "name" : "projetId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/Session"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post" : {
+        "tags" : [ "session-controller" ],
+        "operationId" : "creer_1",
+        "parameters" : [ {
+          "name" : "projetId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/NouvelleSession"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "description" : "Created",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Session"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projets/{projetId}/questions" : {
+      "post" : {
+        "tags" : [ "map-controller" ],
+        "operationId" : "creerQuestion",
+        "parameters" : [ {
+          "name" : "projetId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/QuestionEditee"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "description" : "Created",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Carte"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projets/{projetId}/questions/{questionId}/sessions" : {
+      "post" : {
+        "tags" : [ "session-controller" ],
+        "operationId" : "ouvrir",
+        "parameters" : [ {
+          "name" : "projetId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }, {
+          "name" : "questionId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "201" : {
+            "description" : "Created",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Session"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projets/{projetId}/questions/{id}/hors-perimetre" : {
+      "post" : {
+        "tags" : [ "map-controller" ],
+        "operationId" : "horsPerimetre",
+        "parameters" : [ {
+          "name" : "projetId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }, {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Carte"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projets/{projetId}/brouillard/{id}/promouvoir" : {
+      "post" : {
+        "tags" : [ "map-controller" ],
+        "operationId" : "promouvoir",
+        "parameters" : [ {
+          "name" : "projetId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }, {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/Promotion"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Carte"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projets/import" : {
+      "post" : {
+        "tags" : [ "projet-controller" ],
+        "operationId" : "importerFichier",
+        "parameters" : [ {
+          "name" : "source",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "multipart/form-data" : {
+              "schema" : {
+                "type" : "object",
+                "properties" : {
+                  "file" : {
+                    "type" : "string",
+                    "format" : "binary"
+                  }
+                },
+                "required" : [ "file" ]
+              }
+            },
+            "application/json" : {
+              "schema" : {
+                "type" : "string"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "description" : "Created",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Importe"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jalons/{id}/tickets" : {
+      "post" : {
+        "tags" : [ "roadmap-controller" ],
+        "operationId" : "ajouterTicket",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/TicketEdite"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Roadmap"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/cles-api" : {
+      "get" : {
+        "tags" : [ "cle-api-controller" ],
+        "operationId" : "lister_2",
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "object",
+                  "additionalProperties" : {
+                    "type" : "array",
+                    "items" : {
+                      "$ref" : "#/components/schemas/Cle"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post" : {
+        "tags" : [ "cle-api-controller" ],
+        "operationId" : "creer_2",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/NouvelleCle"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "description" : "Created",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Creee"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/status" : {
+      "get" : {
+        "tags" : [ "status-controller" ],
+        "operationId" : "status",
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "object",
+                  "additionalProperties" : { }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/specs/{id}" : {
+      "get" : {
+        "tags" : [ "spec-controller" ],
+        "operationId" : "spec",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Spec"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions/{id}" : {
+      "get" : {
+        "tags" : [ "session-controller" ],
+        "operationId" : "detail",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/SessionDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions/{id}/contexte" : {
+      "get" : {
+        "tags" : [ "session-controller" ],
+        "operationId" : "remplissage",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Contexte"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions/{id}/consommation" : {
+      "get" : {
+        "tags" : [ "consommation-controller" ],
+        "operationId" : "session",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Total"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions/{id}/artefacts" : {
+      "get" : {
+        "tags" : [ "session-controller" ],
+        "operationId" : "artefacts",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/Artefact"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projets/{id}" : {
+      "get" : {
+        "tags" : [ "projet-controller" ],
+        "operationId" : "detail_1",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Projet"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projets/{id}/consommation" : {
+      "get" : {
+        "tags" : [ "consommation-controller" ],
+        "operationId" : "projet",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Total"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jira/status" : {
+      "get" : {
+        "tags" : [ "jira-controller" ],
+        "operationId" : "status_1",
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "object",
+                  "additionalProperties" : { }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/cles-api/{id}" : {
+      "delete" : {
+        "tags" : [ "cle-api-controller" ],
+        "operationId" : "revoquer",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "object",
+                  "additionalProperties" : {
+                    "type" : "boolean"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components" : {
+    "schemas" : {
+      "TicketEdite" : {
+        "type" : "object",
+        "properties" : {
+          "jalonId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "titre" : {
+            "type" : "string"
+          },
+          "corps" : {
+            "type" : "string"
+          },
+          "exigences" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          },
+          "blockedBy" : {
+            "type" : "array",
+            "items" : {
+              "type" : "integer",
+              "format" : "int64"
+            }
+          }
+        }
+      },
+      "Jalon" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "ordre" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "titre" : {
+            "type" : "string"
+          },
+          "jiraKey" : {
+            "type" : "string"
+          },
+          "tickets" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/Ticket"
+            }
+          }
+        }
+      },
+      "Roadmap" : {
+        "type" : "object",
+        "properties" : {
+          "specId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "version" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "jiraProjet" : {
+            "type" : "string"
+          },
+          "jalons" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/Jalon"
+            }
+          }
+        }
+      },
+      "Ticket" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "ordre" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "titre" : {
+            "type" : "string"
+          },
+          "corps" : {
+            "type" : "string"
+          },
+          "exigences" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          },
+          "blockedBy" : {
+            "type" : "array",
+            "items" : {
+              "type" : "integer",
+              "format" : "int64"
+            }
+          },
+          "jiraKey" : {
+            "type" : "string"
+          }
+        }
+      },
+      "Texte" : {
+        "type" : "object",
+        "properties" : {
+          "texte" : {
+            "type" : "string"
+          }
+        }
+      },
+      "Carte" : {
+        "type" : "object",
+        "properties" : {
+          "destination" : {
+            "type" : "string"
+          },
+          "notes" : {
+            "type" : "string"
+          },
+          "questions" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/Question"
+            }
+          },
+          "brouillard" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/Ligne"
+            }
+          },
+          "horsPerimetre" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/Ligne"
+            }
+          }
+        }
+      },
+      "Ligne" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "texte" : {
+            "type" : "string"
+          }
+        }
+      },
+      "Question" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "numero" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "titre" : {
+            "type" : "string"
+          },
+          "corps" : {
+            "type" : "string"
+          },
+          "type" : {
+            "type" : "string"
+          },
+          "statut" : {
+            "type" : "string"
+          },
+          "blockedBy" : {
+            "type" : "array",
+            "items" : {
+              "type" : "integer",
+              "format" : "int32"
+            }
+          },
+          "ouvrable" : {
+            "type" : "boolean"
+          }
+        }
+      },
+      "QuestionEditee" : {
+        "type" : "object",
+        "properties" : {
+          "titre" : {
+            "type" : "string"
+          },
+          "corps" : {
+            "type" : "string"
+          },
+          "type" : {
+            "type" : "string"
+          },
+          "blockedBy" : {
+            "type" : "array",
+            "items" : {
+              "type" : "integer",
+              "format" : "int32"
+            }
+          }
+        }
+      },
+      "EnTete" : {
+        "type" : "object",
+        "properties" : {
+          "destination" : {
+            "type" : "string"
+          },
+          "notes" : {
+            "type" : "string"
+          }
+        }
+      },
+      "Titre" : {
+        "type" : "object",
+        "properties" : {
+          "titre" : {
+            "type" : "string"
+          }
+        }
+      },
+      "Saisie" : {
+        "type" : "object",
+        "properties" : {
+          "token" : {
+            "type" : "string"
+          }
+        }
+      },
+      "Etat" : {
+        "type" : "object",
+        "properties" : {
+          "configure" : {
+            "type" : "boolean"
+          },
+          "type" : {
+            "type" : "string"
+          },
+          "indice" : {
+            "type" : "string"
+          }
+        }
+      },
+      "SseEmitter" : {
+        "type" : "object",
+        "properties" : {
+          "timeout" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }
+      },
+      "Demande" : {
+        "type" : "object",
+        "properties" : {
+          "projet" : {
+            "type" : "string"
+          }
+        }
+      },
+      "Echec" : {
+        "type" : "object",
+        "properties" : {
+          "titre" : {
+            "type" : "string"
+          },
+          "erreur" : {
+            "type" : "string"
+          }
+        }
+      },
+      "Resultat" : {
+        "type" : "object",
+        "properties" : {
+          "projet" : {
+            "type" : "string"
+          },
+          "epicsCrees" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "storiesCreees" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "liensCrees" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "misesAJour" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "recuperes" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "echecs" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/Echec"
+            }
+          },
+          "orphelines" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          }
+        }
+      },
+      "Publication" : {
+        "type" : "object",
+        "properties" : {
+          "espace" : {
+            "type" : "string"
+          },
+          "url" : {
+            "type" : "string"
+          },
+          "versionConfluence" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "creee" : {
+            "type" : "boolean"
+          }
+        }
+      },
+      "Confirmation" : {
+        "type" : "object",
+        "properties" : {
+          "messageId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "indice" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "texte" : {
+            "type" : "string"
+          }
+        }
+      },
+      "Decision" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "numero" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "texte" : {
+            "type" : "string"
+          },
+          "sessionId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "confirmedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        }
+      },
+      "Session" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "projetId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "methode" : {
+            "type" : "string"
+          },
+          "statut" : {
+            "type" : "string"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "questionId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "question" : {
+            "type" : "string"
+          },
+          "continuedFrom" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "tache" : {
+            "type" : "string"
+          },
+          "progression" : {
+            "type" : "string"
+          }
+        }
+      },
+      "NouveauMessage" : {
+        "type" : "object",
+        "properties" : {
+          "texte" : {
+            "type" : "string"
+          }
+        }
+      },
+      "NouveauProjet" : {
+        "type" : "object",
+        "properties" : {
+          "nom" : {
+            "type" : "string"
+          },
+          "description" : {
+            "type" : "string"
+          }
+        }
+      },
+      "Cree" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "nom" : {
+            "type" : "string"
+          },
+          "description" : {
+            "type" : "string"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "sessionTraceId" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }
+      },
+      "NouvelleSession" : {
+        "type" : "object",
+        "properties" : {
+          "methode" : {
+            "type" : "string"
+          }
+        }
+      },
+      "Promotion" : {
+        "type" : "object",
+        "properties" : {
+          "type" : {
+            "type" : "string"
+          }
+        }
+      },
+      "Importe" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "nom" : {
+            "type" : "string"
+          },
+          "description" : {
+            "type" : "string"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "sourceIdeaUrl" : {
+            "type" : "string"
+          },
+          "sessionTraceId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "questions" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "horsPerimetre" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "brouillard" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "sessionResearchId" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }
+      },
+      "NouvelleCle" : {
+        "type" : "object",
+        "properties" : {
+          "nom" : {
+            "type" : "string"
+          },
+          "jours" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }
+      },
+      "Creee" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string"
+          },
+          "nom" : {
+            "type" : "string"
+          },
+          "cle" : {
+            "type" : "string"
+          },
+          "expireLe" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        }
+      },
+      "Spec" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "version" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "contenu" : {
+            "type" : "string"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "confluenceVersion" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "confluenceEspace" : {
+            "type" : "string"
+          }
+        }
+      },
+      "Panneau" : {
+        "type" : "object",
+        "properties" : {
+          "proposees" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/Proposee"
+            }
+          },
+          "decisions" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/Decision"
+            }
+          }
+        }
+      },
+      "Proposee" : {
+        "type" : "object",
+        "properties" : {
+          "messageId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "indice" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "texte" : {
+            "type" : "string"
+          }
+        }
+      },
+      "Affichage" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "role" : {
+            "type" : "string"
+          },
+          "texte" : {
+            "type" : "string"
+          },
+          "round" : { },
+          "incomplet" : {
+            "type" : "boolean"
+          }
+        }
+      },
+      "SessionDetail" : {
+        "type" : "object",
+        "properties" : {
+          "session" : {
+            "$ref" : "#/components/schemas/Session"
+          },
+          "projet" : {
+            "type" : "string"
+          },
+          "messages" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/Affichage"
+            }
+          },
+          "reessayable" : {
+            "type" : "boolean"
+          }
+        }
+      },
+      "Contexte" : {
+        "type" : "object",
+        "properties" : {
+          "tokens" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "fenetre" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "remplissage" : {
+            "type" : "number",
+            "format" : "double"
+          },
+          "seuilAtteint" : {
+            "type" : "boolean"
+          }
+        }
+      },
+      "Total" : {
+        "type" : "object",
+        "properties" : {
+          "inputTokens" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "outputTokens" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "cacheReadTokens" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "cacheWriteTokens" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "cout" : {
+            "type" : "number"
+          }
+        }
+      },
+      "Artefact" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "type" : {
+            "type" : "string"
+          },
+          "contenu" : {
+            "type" : "string"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        }
+      },
+      "Projet" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "nom" : {
+            "type" : "string"
+          },
+          "description" : {
+            "type" : "string"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "sourceIdeaUrl" : {
+            "type" : "string"
+          }
+        }
+      },
+      "Version" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "version" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        }
+      },
+      "Cle" : {
+        "type" : "object",
+        "properties" : {
+          "id" : {
+            "type" : "string"
+          },
+          "nom" : {
+            "type" : "string"
+          },
+          "indice" : {
+            "type" : "string"
+          },
+          "creePar" : {
+            "type" : "string"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "expireLe" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "utiliseeLe" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        }
+      }
+    }
+  }
+}

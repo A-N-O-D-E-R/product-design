@@ -1,0 +1,30 @@
+# Backend (mvn verify, Testcontainers) and the GHCR image through the collection's reusable workflow (ADR 0005). The Maven build
+# also builds the front (frontend-maven-plugin, pnpm); the frontend job runs lint, vitest and the build on their own.
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    uses: A-N-O-D-E-R/springboot-starter-collection/.github/workflows/reusable-ci.yml@v0.3.0
+    with:
+      frontend-dir: frontend
+      image-name: ghcr.io/a-n-o-d-e-r/productdesigner
+    permissions:
+      contents: read
+      packages: write
+
+  contracts:
+    # hand-synced copies of contracts owned by other repos (see scripts/check-contracts.sh)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: scripts/check-contracts.sh
+        env:
+          CONTRACTS_TOKEN: ${{ secrets.CONTRACTS_TOKEN }}

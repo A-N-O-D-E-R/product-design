@@ -1,39 +1,36 @@
 import { useEffect, useState, type FormEvent } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { queries } from '@/api/query'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Markdown } from '@/components/Markdown'
-import { api, postSse } from '@/lib/api'
+import { roadmap as api, type ExportJira, type Jalon, type Roadmap, type Ticket } from '@/api/roadmap'
 
-type Ticket = { id: number; ordre: number; titre: string; corps: string; exigences: string[]; blockedBy: number[]; jiraKey: string | null }
-type Jalon = { id: number; ordre: number; titre: string; jiraKey: string | null; tickets: Ticket[] }
-type Roadmap = { specId: number; version: number; jiraProjet: string | null; jalons: Jalon[] }
-type Export = { projet: string; epicsCrees: number; storiesCreees: number; liensCrees: number; misesAJour: number; echecs: { titre: string; erreur: string }[]; orphelines: string[] }
 type Edition = { jalonId: number; titre: string; corps: string; exigences: string; blockedBy: number[] }
 
 /** Roadmap d'une version de Spec : génération (E-23, E-24) et édition avant export (E-25). */
 export function RoadmapSection({ specId }: { specId: number }) {
-  const [roadmap, setRoadmap] = useState<Roadmap>()
+  const client = useQueryClient()
+  const { data: roadmap } = useQuery(queries.roadmap(specId))
+  const { data: jira } = useQuery(queries.jiraStatus())
+  /** Chaque écriture renvoie la Roadmap à jour : elle remplace celle du cache. */
+  const setRoadmap = (r: Roadmap) => client.setQueryData(queries.roadmap(specId).queryKey, r)
+  const relire = () => client.invalidateQueries({ queryKey: queries.roadmap(specId).queryKey })
   const [caracteres, setCaracteres] = useState<number>()
   const [avertissements, setAvertissements] = useState<string[]>([])
   const [erreur, setErreur] = useState<string>()
-  const [jira, setJira] = useState<{ configure: boolean; message?: string }>()
-  const [projetJira, setProjetJira] = useState('')
+  // le projet Jira saisi pour cette version ; à défaut, celui de la Roadmap
+  const [saisie, setSaisie] = useState<{ specId: number; valeur: string }>()
+  const projetJira = saisie?.specId === specId ? saisie.valeur : (roadmap?.jiraProjet ?? '')
+  const setProjetJira = (valeur: string) => setSaisie({ specId, valeur })
   const [exportEnCours, setExportEnCours] = useState(false)
-  const [resultat, setResultat] = useState<Export>()
+  const [resultat, setResultat] = useState<ExportJira>()
 
   useEffect(() => {
     setAvertissements([])
     setResultat(undefined)
-    api<Roadmap>(`/api/specs/${specId}/roadmap`).then((r) => {
-      setRoadmap(r)
-      setProjetJira(r.jiraProjet ?? '')
-    })
   }, [specId])
-
-  useEffect(() => {
-    api<{ configure: boolean; message?: string }>('/api/jira/status').then(setJira)
-  }, [])
 
   /** Export (E-26 à E-30) : crée ce qui manque, met à jour le reste, ne supprime rien dans Jira. */
   async function exporter() {
@@ -41,12 +38,12 @@ export function RoadmapSection({ specId }: { specId: number }) {
     setResultat(undefined)
     setExportEnCours(true)
     try {
-      setResultat(await api<Export>(`/api/specs/${specId}/export-jira`, { method: 'POST', body: JSON.stringify({ projet: projetJira }) }))
+      setResultat(await api.exporterJira(specId, projetJira))
     } catch (e) {
       setErreur((e as Error).message)
     }
     setExportEnCours(false)
-    api<Roadmap>(`/api/specs/${specId}/roadmap`).then(setRoadmap)
+    await relire()
   }
 
   const tickets = roadmap?.jalons.flatMap((j) => j.tickets) ?? []
@@ -58,7 +55,7 @@ export function RoadmapSection({ specId }: { specId: number }) {
     setAvertissements([])
     setCaracteres(0)
     try {
-      await postSse(`/api/specs/${specId}/roadmap`, undefined, (name, data) => {
+      await api.generer(specId, (name, data) => {
         if (name === 'progression') setCaracteres(data.caracteres)
         if (name === 'fin') setAvertissements(data.avertissements)
         if (name === 'erreur') setErreur(data.message)
@@ -67,13 +64,13 @@ export function RoadmapSection({ specId }: { specId: number }) {
       setErreur((e as Error).message)
     }
     setCaracteres(undefined)
-    api<Roadmap>(`/api/specs/${specId}/roadmap`).then(setRoadmap)
+    await relire()
   }
 
-  async function ecrire(path: string, method: string, body?: unknown) {
+  async function ecrire(requete: Promise<Roadmap>) {
     setErreur(undefined)
     try {
-      setRoadmap(await api<Roadmap>(path, { method, body: body === undefined ? undefined : JSON.stringify(body) }))
+      setRoadmap(await requete)
       return true
     } catch (e) {
       setErreur((e as Error).message)
@@ -92,16 +89,16 @@ export function RoadmapSection({ specId }: { specId: number }) {
         </Button>
       </div>
       {caracteres !== undefined && <p role="status" className="text-sm text-muted-foreground">Génération…{caracteres > 0 && ` ${caracteres} caractères reçus.`}</p>}
-      {erreur && <p role="alert" className="text-sm text-red-700">{erreur}</p>}
+      {erreur && <p role="alert" className="text-sm text-destructive">{erreur}</p>}
       {avertissements.length > 0 && (
-        <ul role="status" className="list-disc rounded bg-amber-50 py-1 pl-6 text-sm text-amber-950">
+        <ul role="status" className="list-disc rounded bg-warning/15 py-1 pl-6 text-sm text-foreground">
           {avertissements.map((a) => <li key={a}>{a}</li>)}
         </ul>
       )}
       {tickets.length > 0 && (
         <div className="grid gap-2 rounded-md border bg-muted/30 p-2 text-sm">
           {jira && !jira.configure ? (
-            <p role="alert" className="text-amber-900">{jira.message}</p>
+            <p role="alert" className="text-foreground">{jira.message}</p>
           ) : (
             <div className="flex items-center gap-2">
               <Input
@@ -125,13 +122,13 @@ export function RoadmapSection({ specId }: { specId: number }) {
                 {resultat.misesAJour} mise(s) à jour.
               </p>
               {resultat.echecs.length > 0 && (
-                <ul className="list-disc pl-5 text-red-800">
+                <ul className="list-disc pl-5 text-destructive">
                   {resultat.echecs.map((e) => <li key={e.titre + e.erreur}>{e.titre} : {e.erreur}</li>)}
                   <li className="list-none text-muted-foreground">Relancer l'export ne rejoue que ces éléments.</li>
                 </ul>
               )}
               {resultat.orphelines.length > 0 && (
-                <p className="text-amber-900">
+                <p className="text-foreground">
                   Supprimés localement mais toujours dans Jira (non supprimés) : {resultat.orphelines.join(', ')}.
                 </p>
               )}
@@ -141,7 +138,7 @@ export function RoadmapSection({ specId }: { specId: number }) {
       )}
       {roadmap?.jalons.map((j) => (
         <div key={j.id} className="grid gap-2 rounded-md border p-2">
-          <TitreJalon jalon={j} onSave={(t) => ecrire(`/api/jalons/${j.id}`, 'PUT', { titre: t })} />
+          <TitreJalon jalon={j} onSave={(t) => ecrire(api.renommerJalon(j.id, t))} />
           {j.tickets.map((t) => (
             <TicketLigne
               key={t.id}
@@ -149,14 +146,14 @@ export function RoadmapSection({ specId }: { specId: number }) {
               jalons={roadmap.jalons}
               autres={tickets.filter((x) => x.id !== t.id)}
               titre={titre}
-              onSave={(e) => ecrire(`/api/tickets/${t.id}`, 'PUT', corps(e))}
-              onSupprimer={() => confirm(`Supprimer « ${t.titre} » ?`) && ecrire(`/api/tickets/${t.id}`, 'DELETE')}
+              onSave={(e) => ecrire(api.modifierTicket(t.id, corps(e)))}
+              onSupprimer={() => confirm(`Supprimer « ${t.titre} » ?`) && ecrire(api.supprimerTicket(t.id))}
             />
           ))}
           <NouveauTicket
             jalonId={j.id}
             autres={tickets}
-            onSave={(e) => ecrire(`/api/jalons/${j.id}/tickets`, 'POST', corps(e))}
+            onSave={(e) => ecrire(api.ajouterTicket(j.id, corps(e)))}
           />
         </div>
       ))}
