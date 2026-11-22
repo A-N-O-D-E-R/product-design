@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { queries } from '@/api/query'
 import { createRootRoute, createRoute, createRouter, Outlet } from '@tanstack/react-router'
 import { AppSidebar } from '@/components/layout/AppSidebar'
+import { TokenClaude } from '@/components/TokenClaude'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
 import { Projets } from '@/pages/Projets'
 import { ProjetPage } from '@/pages/ProjetPage'
@@ -20,6 +21,7 @@ function Layout() {
             {status.message}
           </div>
         )}
+        {status?.token && <TokenClaude token={status.token} />}
         <main className="p-4">
           <Outlet />
         </main>

@@ -22,6 +22,8 @@
     <aws.sdk.version>2.55.14</aws.sdk.version>
     <mapstruct.version>1.6.3</mapstruct.version>
     <lombok-mapstruct-binding.version>0.2.0</lombok-mapstruct-binding.version>
+    <!-- Starter local (mvn install dans spring-ai-claude-code-starter) : lance le CLI Claude Code. -->
+    <claude-code-starter.version>0.1.0-SNAPSHOT</claude-code-starter.version>
   </properties>
 
   <dependencyManagement>
@@ -99,7 +101,13 @@
       <groupId>io.github.a-n-o-d-e-r</groupId>
       <artifactId>spring-boot-starter-confluence</artifactId>
     </dependency>
-    <!-- LLM via Spring AI : le fournisseur se choisit par spring.ai.model.chat (anthropic, openai, bedrock-converse, ollama). -->
+    <!-- LLM : le fournisseur se choisit par spring.ai.model.chat (claude-code, anthropic, openai, bedrock-converse, ollama). -->
+    <!-- claude-code : le CLI Claude Code, hors Spring AI (ClaudeCodeAgent). -->
+    <dependency>
+      <groupId>com.anode.ai</groupId>
+      <artifactId>spring-boot-starter-ai-claude</artifactId>
+      <version>${claude-code-starter.version}</version>
+    </dependency>
     <dependency>
       <groupId>org.springframework.ai</groupId>
       <artifactId>spring-ai-starter-model-anthropic</artifactId>

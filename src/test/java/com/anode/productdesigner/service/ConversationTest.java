@@ -40,13 +40,17 @@ class ConversationTest {
     @Test
     void rechercheWebSelonLeFournisseurEtLaCleTavily() {
         var sansModele = new StaticListableBeanFactory().getBeanProvider(org.springframework.ai.chat.model.ChatModel.class);
+        var sansCli = new StaticListableBeanFactory().getBeanProvider(ClaudeCode.class);
         var env = new MockEnvironment();
-        assertThat(new Llm(sansModele, env, new Recherche("", "http://x"), "anthropic").rechercheServeur()).isTrue();
-        assertThat(new Llm(sansModele, env, new Recherche("", "http://x"), "openai").rechercheWeb()).isFalse();
-        var tavily = new Llm(sansModele, env, new Recherche("tvly", "http://x"), "anthropic");
+        assertThat(new Llm(sansModele, sansCli, env, new Recherche("", "http://x"), "anthropic").rechercheServeur()).isTrue();
+        assertThat(new Llm(sansModele, sansCli, env, new Recherche("", "http://x"), "openai").rechercheWeb()).isFalse();
+        var tavily = new Llm(sansModele, sansCli, env, new Recherche("tvly", "http://x"), "anthropic");
         assertThat(tavily.rechercheWeb()).isTrue();
         assertThat(tavily.rechercheServeur()).isFalse();
         assertThat(tavily.outilsRecherche()).hasSize(1);
-        assertThat(new Llm(sansModele, env, new Recherche("", "http://x"), "anthropic").configure()).isFalse();
+        assertThat(new Llm(sansModele, sansCli, env, new Recherche("", "http://x"), "anthropic").configure()).isFalse();
+        var cli = new Llm(sansModele, sansCli, env, new Recherche("tvly", "http://x"), Llm.CLAUDE_CODE);
+        assertThat(cli.rechercheServeur()).isTrue();
+        assertThat(cli.outilsRecherche()).isEmpty();
     }
 }

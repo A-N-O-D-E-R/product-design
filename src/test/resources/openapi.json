@@ -307,6 +307,59 @@
         }
       }
     },
+    "/api/config/token" : {
+      "get" : {
+        "tags" : [ "claude-token" ],
+        "operationId" : "etat",
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Etat"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put" : {
+        "tags" : [ "claude-token" ],
+        "operationId" : "enregistrer",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/Saisie"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Etat"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete" : {
+        "tags" : [ "claude-token" ],
+        "operationId" : "effacer",
+        "responses" : {
+          "204" : {
+            "description" : "No Content"
+          }
+        }
+      }
+    },
     "/api/specs/{specId}/roadmap" : {
       "get" : {
         "tags" : [ "roadmap-controller" ],
@@ -1630,6 +1683,28 @@
         "type" : "object",
         "properties" : {
           "titre" : {
+            "type" : "string"
+          }
+        }
+      },
+      "Saisie" : {
+        "type" : "object",
+        "properties" : {
+          "token" : {
+            "type" : "string"
+          }
+        }
+      },
+      "Etat" : {
+        "type" : "object",
+        "properties" : {
+          "configure" : {
+            "type" : "boolean"
+          },
+          "type" : {
+            "type" : "string"
+          },
+          "indice" : {
             "type" : "string"
           }
         }

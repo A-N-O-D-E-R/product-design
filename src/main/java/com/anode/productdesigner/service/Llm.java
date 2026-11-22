@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
+import com.anode.ai.claude.ClaudeCodeException;
 import com.anthropic.errors.AnthropicServiceException;
 import com.anthropic.models.messages.OutputConfig;
 import com.openai.errors.OpenAIServiceException;
@@ -34,14 +35,16 @@ import software.amazon.awssdk.awscore.exception.AwsServiceException;
 import software.amazon.awssdk.core.exception.SdkClientException;
 
 /**
- * Appels au LLM via Spring AI, quel que soit le fournisseur (`spring.ai.model.chat` : anthropic, openai,
- * bedrock-converse, ollama). Les outils ne sont jamais exécutés par Spring AI : les appels reviennent à l'app.
- * Seul Anthropic reçoit des options propres (effort, prompt caching, recherche web serveur).
+ * Appels au LLM, quel que soit le fournisseur (`spring.ai.model.chat`) : claude-code (CLI Claude Code, cf. {@link ClaudeCode}),
+ * ou via Spring AI anthropic, openai, bedrock-converse, ollama. Les outils ne sont jamais exécutés par Spring AI : les appels
+ * reviennent à l'app. Seul Anthropic reçoit des options propres (effort, prompt caching, recherche web serveur).
  */
 @Component
 public class Llm {
 
-    public static final String CONFIG_ABSENTE = "Fournisseur LLM non configuré : régler spring.ai.model.chat (anthropic, openai,"
+    public static final String CLAUDE_CODE = "claude-code";
+
+    public static final String CONFIG_ABSENTE = "Fournisseur LLM non configuré : régler spring.ai.model.chat (claude-code, anthropic, openai,"
             + " bedrock-converse ou ollama) et sa clé (ex. spring.ai.anthropic.api-key) dans ~/.productdesigner/application.yml, puis redémarrer.";
 
     public static final String SANS_RECHERCHE_WEB = "La research a besoin de la recherche web : configurer productdesigner.recherche.tavily-api-key"
@@ -80,24 +83,33 @@ public class Llm {
     }
 
     private final ObjectProvider<ChatModel> modeles;
+    private final ObjectProvider<ClaudeCode> claudeCode;
     private final Environment env;
     private final Recherche recherche;
     private final String fournisseur;
 
-    Llm(ObjectProvider<ChatModel> modeles, Environment env, Recherche recherche,
-        @Value("${spring.ai.model.chat:anthropic}") String fournisseur) {
+    Llm(ObjectProvider<ChatModel> modeles, ObjectProvider<ClaudeCode> claudeCode, Environment env, Recherche recherche,
+        @Value("${spring.ai.model.chat:claude-code}") String fournisseur) {
         this.modeles = modeles;
+        this.claudeCode = claudeCode;
         this.env = env;
         this.recherche = recherche;
         this.fournisseur = fournisseur;
+    }
+
+    private boolean cli() {
+        return fournisseur.equals(CLAUDE_CODE);
     }
 
     public String fournisseur() {
         return fournisseur;
     }
 
-    /** Bedrock et Ollama : identifiants AWS ou serveur local vérifiés au premier appel. */
+    /** Bedrock et Ollama : identifiants AWS ou serveur local vérifiés au premier appel ; claude-code : au premier appel aussi. */
     public boolean configure() {
+        if (cli()) {
+            return claudeCode.getIfAvailable() != null;
+        }
         if (modeles.getIfAvailable() == null) {
             return false;
         }
@@ -121,27 +133,34 @@ public class Llm {
 
     /** Lève {@link ConfigManquanteException} si aucun fournisseur n'est utilisable. */
     public void verifier() {
-        modele();
+        if (!configure()) {
+            throw new ConfigManquanteException(CONFIG_ABSENTE);
+        }
     }
 
     public String nomModele() {
+        if (cli()) {
+            ClaudeCode c = claudeCode.getIfAvailable();
+            return c == null ? "" : c.model();
+        }
         ChatModel m = modeles.getIfAvailable();
         String nom = m == null ? null : m.getDefaultOptions().getModel();
         return nom == null ? "" : nom;
     }
 
-    /** Recherche web : outil client (Tavily) sur tout fournisseur, sinon recherche serveur d'Anthropic. */
+    /** Recherche web : WebSearch du CLI (claude-code), outil client (Tavily) sur tout autre fournisseur, sinon recherche serveur d'Anthropic. */
     public boolean rechercheWeb() {
-        return recherche.disponible() || fournisseur.equals("anthropic");
+        return cli() || recherche.disponible() || fournisseur.equals("anthropic");
     }
 
     /** Outils de recherche à proposer au modèle : l'outil client, ou rien (recherche serveur, cf. {@link #rechercheServeur()}). */
     public List<ToolCallback> outilsRecherche() {
-        return recherche.disponible() ? List.of(recherche) : List.of();
+        return recherche.disponible() && !cli() ? List.of(recherche) : List.of();
     }
 
+    /** Recherche menée par le fournisseur lui-même : WebSearch du CLI, ou recherche serveur d'Anthropic sans Tavily. */
     public boolean rechercheServeur() {
-        return !recherche.disponible() && fournisseur.equals("anthropic");
+        return cli() || !recherche.disponible() && fournisseur.equals("anthropic");
     }
 
     public String rechercher(String arguments) {
@@ -154,6 +173,10 @@ public class Llm {
      */
     public Reponse stream(List<Message> messages, Effort effort, List<ToolCallback> outils, String schema, boolean rechercheServeur,
                           Deltas deltas) throws IOException {
+        if (cli()) {
+            verifier();
+            return claudeCode.getObject().stream(messages, outils, schema, rechercheServeur, deltas);
+        }
         ChatModel m = modele();
         ChatOptions.Builder<?> options = m.getDefaultOptions().mutate();
         if (!outils.isEmpty()) {
@@ -221,6 +244,9 @@ public class Llm {
             if (c instanceof SdkClientException) {
                 return "Identifiants AWS indisponibles ou expirés (relancer aws sso login ?) : " + c.getMessage();
             }
+            if (c instanceof ClaudeCodeException) {
+                return messageClaudeCode(String.valueOf(c.getMessage()));
+            }
             if (c instanceof ConnectException) {
                 return "Fournisseur LLM injoignable (serveur Ollama démarré ? URL de base ?) : " + c.getMessage();
             }
@@ -236,6 +262,22 @@ public class Llm {
                     : "Requête refusée par le fournisseur LLM : " + message;
             default -> "Réponse interrompue : " + message;
         };
+    }
+
+    /** Erreurs du CLI Claude Code : pas de statut HTTP, seulement son message. */
+    private static String messageClaudeCode(String m) {
+        String bas = m.toLowerCase(Locale.ROOT);
+        if (bas.contains("not logged in") || bas.contains("invalid api key") || bas.contains("authentication")
+                || bas.contains("oauth") || bas.contains("401")) {
+            return "Claude Code n'est pas authentifié : saisir un token (claude setup-token) dans l'application. " + m;
+        }
+        if (bas.contains("no such file") || bas.contains("cannot run program")) {
+            return "CLI Claude Code introuvable : l'installer (npm install -g @anthropic-ai/claude-code). " + m;
+        }
+        if (bas.contains("too long")) {
+            return "Requête trop longue pour le contexte du modèle : continue dans une nouvelle Session.";
+        }
+        return "Réponse interrompue : " + m;
     }
 
     /** Statut HTTP de l'erreur du fournisseur, 0 si ce n'en est pas une. */

@@ -84,6 +84,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/config/token": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["etat"];
+        put: operations["enregistrer"];
+        post?: never;
+        delete: operations["effacer"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/specs/{specId}/roadmap": {
         parameters: {
             query?: never;
@@ -644,6 +660,14 @@ export interface components {
         Titre: {
             titre: string;
         };
+        Saisie: {
+            token: string;
+        };
+        Etat: {
+            configure: boolean;
+            type: string;
+            indice: string;
+        };
         SseEmitter: {
             /** Format: int64 */
             timeout: number;
@@ -1067,6 +1091,68 @@ export interface operations {
                 content: {
                     "*/*": components["schemas"]["Roadmap"];
                 };
+            };
+        };
+    };
+    etat: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["Etat"];
+                };
+            };
+        };
+    };
+    enregistrer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Saisie"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["Etat"];
+                };
+            };
+        };
+    };
+    effacer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

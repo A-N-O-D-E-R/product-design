@@ -14,8 +14,8 @@ spring:
       enabled: true
   ai:
     model:
-      # Fournisseur LLM : anthropic, openai (ou compatible : base-url), bedrock-converse, ollama.
-      chat: anthropic
+      # Fournisseur LLM : claude-code (CLI Claude Code), anthropic, openai (ou compatible : base-url), bedrock-converse, ollama.
+      chat: claude-code
       # Seul le chat sert : aucun autre modèle n'est créé.
       embedding: none
       image: none
@@ -27,6 +27,12 @@ spring:
       chat:
         options:
           model: claude-opus-5-5
+    # CLI Claude Code (spring-ai-claude-code-starter). Auth : token saisi dans l'interface, sinon `claude login` local.
+    claude-code:
+      executable: claude
+      model: opus
+      timeout: 30m
+      max-turns: 40
   # Postgres 17. Dev : compose.yaml, démarré par spring-boot-docker-compose avec mvn spring-boot:run, qui branche la datasource.
   # Ailleurs : SPRING_DATASOURCE_URL, SPRING_DATASOURCE_USERNAME et SPRING_DATASOURCE_PASSWORD (SPRING_DOCKER_COMPOSE_ENABLED=false).
   docker.compose.lifecycle-management: start-only

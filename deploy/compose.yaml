@@ -17,6 +17,8 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/productdesigner
       SPRING_DATASOURCE_USERNAME: productdesigner
       SPRING_DATASOURCE_PASSWORD: productdesigner
+      # L'image n'embarque pas le CLI Claude Code : fournisseur anthropic par défaut ici.
+      SPRING_AI_MODEL_CHAT: ${SPRING_AI_MODEL_CHAT:-anthropic}
       SPRING_AI_ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       # Export Jira et Confluence (voir le README) :
       # ANODE_JIRA_BASE_URL: https://<site>.atlassian.net

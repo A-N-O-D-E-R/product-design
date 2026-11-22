@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/sidebar'
 
 const FOURNISSEURS: Record<string, string> = {
+  'claude-code': 'Claude Code',
   anthropic: 'API Anthropic',
   openai: 'OpenAI',
   'bedrock-converse': 'Amazon Bedrock',

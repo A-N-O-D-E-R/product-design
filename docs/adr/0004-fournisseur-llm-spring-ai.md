@@ -1,6 +1,6 @@
 # 0004 — Fournisseur LLM indépendant, via Spring AI
 
-Date : 2026-11-13 · Statut : acceptée · Remplace : [0002](0002-fournisseur-bedrock.md) · Révise : D-2, D-24
+Date : 2026-11-13 · Statut : acceptée, complétée par [0009](0009-claude-code-cli.md) · Remplace : [0002](0002-fournisseur-bedrock.md) · Révise : D-2, D-24
 
 ## Contexte
 

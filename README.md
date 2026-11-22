@@ -22,7 +22,8 @@ Application locale, mono-utilisateur, sans authentification. Vocabulaire du doma
 - **Java 25** (ex. `sdk install java 25.0.2-oracle`) et Maven 3.9+.
 - **Docker** : Postgres 17 en développement (`compose.yaml`) et dans les tests (Testcontainers).
 - Node n'est pas requis : le build Maven installe sa propre copie (Node 22 et pnpm 10) pour construire le front.
-- Un fournisseur LLM : API Anthropic (défaut), OpenAI ou compatible, Amazon Bedrock, ou Ollama en local (voir [Fournisseur LLM](#fournisseur-llm)).
+- Un fournisseur LLM (`spring.ai.model.chat`) : le **CLI Claude Code** (défaut, `claude-code`), API Anthropic, OpenAI ou compatible, Amazon Bedrock, ou Ollama en local.
+  - `claude-code` : le CLI installé (`npm install -g @anthropic-ai/claude-code`, vérifier `claude --version`), appelé via [spring-ai-claude-code-starter](https://github.com/A-N-O-D-E-R/spring-ai-claude-code-starter), à installer d'abord dans le dépôt Maven local (`mvn install` dans ce dépôt). Accès : un token OAuth d'abonnement (`claude setup-token`) ou une clé API Console, saisi dans l'app (écrit dans `~/.productdesigner/claude-token`) ; à défaut, la connexion locale (`claude login`). Voir [ADR 0009](docs/adr/0009-claude-code-cli.md).
 - Pour l'export, un site Atlassian Cloud, un email et un [token API](https://id.atlassian.com/manage-profile/security/api-tokens) (non scopé). La même config sert à Jira et à Confluence.
 
 ## Configuration
@@ -32,6 +33,8 @@ Les secrets vivent hors du dépôt, dans `~/.productdesigner/application.yml` (i
 ```yaml
 spring:
   ai:
+    model:
+      chat: anthropic   # défaut : claude-code (aucune clé ici, le token se saisit dans l'app)
     anthropic:
       api-key: sk-ant-...
       # chat.options.model: claude-opus-5-5   # défaut
@@ -171,7 +174,8 @@ navigateur (React, TanStack Router, shadcn)
 Spring Boot 4.1, un seul jar, virtual threads
    ├─ methodes/*.md        prompts des Méthodes (frontmatter : champs de record utilisés)
    ├─ prompts/*.md         prompts de la Spec et de la Roadmap
-   ├─ Llm (Spring AI)      streaming, tool `record`, sortie structurée ; Anthropic, OpenAI, Bedrock, Ollama
+   ├─ Llm                  streaming, tool `record`, sortie structurée ; CLI Claude Code (ClaudeCode), ou Spring AI :
+   │                       Anthropic, OpenAI, Bedrock, Ollama
    │                       (effort, prompt caching et recherche serveur sur Anthropic)
    ├─ Recherche            outil web_search exécuté par l'app (Tavily), tout fournisseur
    ├─ JiraService          export Roadmap vers Jira v3 (bulk, ADF), via spring-boot-starter-jira
